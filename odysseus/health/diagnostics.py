@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import shutil
 import sys
+from importlib import metadata
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -94,6 +95,28 @@ def check_disk_space(path: Path, warn_percent: float, critical_percent: float) -
     return CheckResult("disk_space", CheckStatus.OK, detail)
 
 
+REQUIRED_DEPENDENCIES = ("pydantic", "PyYAML", "requests")
+
+
+def check_dependencies(required: tuple[str, ...] = REQUIRED_DEPENDENCIES) -> CheckResult:
+    """Report whether each required third-party package is installed (F073).
+
+    Read-only: uses installed-distribution metadata, no imports, no network.
+    """
+    versions: list[str] = []
+    missing: list[str] = []
+    for name in required:
+        try:
+            versions.append(f"{name}=={metadata.version(name)}")
+        except metadata.PackageNotFoundError:
+            missing.append(name)
+    if missing:
+        return CheckResult(
+            "dependencies", CheckStatus.CRITICAL, "missing: " + ", ".join(missing)
+        )
+    return CheckResult("dependencies", CheckStatus.OK, ", ".join(versions))
+
+
 def check_config(config: OdysseusConfig) -> CheckResult:
     # Config already passed pydantic validation to exist as an OdysseusConfig,
     # so this check focuses on policy-level sanity, not just schema validity.
@@ -145,6 +168,7 @@ def run_diagnostics(
                 path, config.health.disk_warn_percent, config.health.disk_critical_percent
             ),
         ),
+        _safe_check("dependencies", check_dependencies),
         _safe_check("config", lambda: check_config(config)),
         _safe_check("memory_store", lambda: check_memory_store(memory_store)),
         _safe_check("model_provider", lambda: check_model_provider(model_provider)),

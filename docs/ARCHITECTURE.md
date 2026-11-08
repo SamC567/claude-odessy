@@ -99,3 +99,7 @@ odysseus/
   user text, so e.g. `100%` or `snake_case` match literally instead of
   acting as wildcards. Keyword/substring retrieval limitation above is
   otherwise unchanged.
+- `health.diagnostics` gained `check_dependencies` (F073): reports
+  installed versions of pydantic/PyYAML/requests via package metadata,
+  CRITICAL if any are missing. Still not covered: hardware (CPU/RAM/GPU)
+  and per-service checks beyond the model provider.

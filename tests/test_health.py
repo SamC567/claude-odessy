@@ -60,3 +60,20 @@ def test_as_dict_and_summary_line(tmp_path):
     assert d["overall_status"] == "ok"
     assert isinstance(d["checks"], list)
     assert "OK" in report.summary_line()
+
+
+def test_dependencies_check_ok_and_reports_missing():
+    from odysseus.health.diagnostics import check_dependencies
+
+    ok = check_dependencies(("pytest",))
+    assert ok.status == CheckStatus.OK
+    assert "pytest==" in ok.detail
+    bad = check_dependencies(("pytest", "definitely-not-installed-pkg"))
+    assert bad.status == CheckStatus.CRITICAL
+    assert "definitely-not-installed-pkg" in bad.detail
+
+
+def test_run_diagnostics_includes_dependencies(tmp_path):
+    memory = MemoryStore(tmp_path / "mem.sqlite3")
+    report = run_diagnostics(OdysseusConfig(), memory, EchoProvider(), disk_path=tmp_path)
+    assert any(c.name == "dependencies" for c in report.checks)
