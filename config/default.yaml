@@ -1,0 +1,27 @@
+# Default configuration for the Odysseus/Jarvis Milestone A foundation.
+# No secrets belong in this file. Override any value via environment
+# variables (ODYSSEUS_SECTION__FIELD=value) or a separate local YAML
+# file passed with --config. See config/.env.example for the env form.
+
+identity:
+  name: Jarvis
+  persona: "A private, local-first assistant foundation for the Odysseus project."
+  allow_external_providers: false   # explicit permission gate; keep false unless you mean it
+
+model:
+  provider: echo        # "echo" (always available) or "ollama" (local server)
+  base_url: http://localhost:11434
+  model_name: llama3
+  timeout_seconds: 10.0
+  max_retries: 1
+
+memory:
+  db_path: data/odysseus_memory.sqlite3
+  auto_approve_threshold: null   # null = every candidate requires manual review
+
+health:
+  disk_warn_percent: 85.0
+  disk_critical_percent: 95.0
+  model_check_timeout_seconds: 3.0
+
+log_level: INFO
