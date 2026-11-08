@@ -72,3 +72,9 @@ Append-only log of scheduled-run changes.
 - Suite: 52 passed (baseline 51, python3.13).
 - Remaining F073 gap: GPU/VRAM, per-service checks.
 - Decision: stricter validation could reject a user's existing odd config; defaults unaffected; reversible by removing the validator.
+
+## 2026-11-08 — F009 CLI list-approved
+- Gap: no way to see approved memories from the CLI, so `memory forget <id>` required knowing the id out-of-band.
+- Fix: `memory list-approved` command in `odysseus/cli.py` (shows id, confidence, source, reviewer).
+- Test: `test_cli_memory_list_approved_and_forget` (fails without the change: unknown subcommand).
+- Suite: 53 passed (baseline 52, python3.13).

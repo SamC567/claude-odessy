@@ -4,6 +4,7 @@ Usage:
     python -m odysseus.cli chat "hello there"
     python -m odysseus.cli health
     python -m odysseus.cli memory list-pending
+    python -m odysseus.cli memory list-approved
     python -m odysseus.cli memory approve <id>
     python -m odysseus.cli memory reject <id>
     python -m odysseus.cli memory remember "fact" --source user --confidence 0.8
@@ -70,6 +71,20 @@ def cmd_memory_list_pending(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_memory_list_approved(args: argparse.Namespace) -> int:
+    orchestrator, _ = _build_orchestrator(args.config)
+    approved = orchestrator.memory.list_approved()
+    if not approved:
+        print("No approved memories.")
+        return 0
+    for entry in approved:
+        print(
+            f"[{entry.id}] ({entry.confidence:.2f}, {entry.source}, "
+            f"reviewer={entry.reviewer}) {entry.content}"
+        )
+    return 0
+
+
 def cmd_memory_remember(args: argparse.Namespace) -> int:
     orchestrator, _ = _build_orchestrator(args.config)
     entry = orchestrator.remember(
@@ -127,6 +142,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     list_pending = memory_sub.add_parser("list-pending", help="List review-inbox items")
     list_pending.set_defaults(func=cmd_memory_list_pending)
+
+    list_approved = memory_sub.add_parser(
+        "list-approved", help="List approved memories (find ids for 'forget')"
+    )
+    list_approved.set_defaults(func=cmd_memory_list_approved)
 
     remember = memory_sub.add_parser("remember", help="Submit a candidate memory")
     remember.add_argument("content")

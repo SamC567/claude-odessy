@@ -95,6 +95,9 @@ odysseus/
 
 ## Recent fixes
 
+- CLI `memory list-approved` (F009) lists approved memories with id, source,
+  confidence and reviewer, so the id needed by `memory forget` is discoverable.
+
 - `MemoryStore.query` now escapes SQL `LIKE` wildcards (`%`, `_`, `\`) in
   user text, so e.g. `100%` or `snake_case` match literally instead of
   acting as wildcards. Keyword/substring retrieval limitation above is
