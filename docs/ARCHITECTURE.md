@@ -138,3 +138,5 @@ odysseus/
   (`disk_warn_percent > disk_critical_percent`, or
   `ram_warn_available_percent < ram_critical_available_percent`) with a
   `ConfigError`, instead of silently making the WARNING band unreachable.
+- GPU free-VRAM warning threshold (F073) is now configurable via
+  `health.gpu_vram_warn_free_percent` (default 5, unchanged behaviour).

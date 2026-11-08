@@ -25,5 +25,6 @@ health:
   model_check_timeout_seconds: 3.0
   ram_warn_available_percent: 15.0      # warn when available RAM <= this %
   ram_critical_available_percent: 5.0   # critical when available RAM <= this %
+  gpu_vram_warn_free_percent: 5.0       # warn when free VRAM <= this % (NVIDIA only)
 
 log_level: INFO

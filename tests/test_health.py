@@ -128,3 +128,13 @@ def test_gpu_check_states_and_in_report(tmp_path):
     memory = MemoryStore(tmp_path / "mem.sqlite3")
     report = run_diagnostics(OdysseusConfig(), memory, EchoProvider(), disk_path=tmp_path)
     assert any(c.name == "gpu" for c in report.checks)
+
+
+def test_gpu_vram_threshold_is_configurable(tmp_path):
+    from odysseus.config import HealthConfig
+    from odysseus.health.diagnostics import check_gpu
+
+    gpus = lambda: [("RTX", 8000, 1200)]  # 15% free
+    assert check_gpu(gpus).status == CheckStatus.OK
+    assert check_gpu(gpus, warn_free_percent=20.0).status == CheckStatus.WARNING
+    assert HealthConfig(gpu_vram_warn_free_percent=20.0).gpu_vram_warn_free_percent == 20.0

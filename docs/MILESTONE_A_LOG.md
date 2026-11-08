@@ -92,3 +92,11 @@ Append-only log of scheduled-run changes.
 - Suite: 55 passed (baseline 54, python3.11; no real GPU available in cloud run).
 - Remaining F073 gap: per-service checks, configurable VRAM threshold.
 - Decision: no GPU reported as OK (optional hardware); 5% free-VRAM warn threshold hardcoded, reversible.
+
+## 2026-11-08 — F073 configurable VRAM threshold
+- Gap: GPU free-VRAM warn threshold was hardcoded at 5%.
+- Fix: `health.gpu_vram_warn_free_percent` in `HealthConfig` + `config/default.yaml`; `check_gpu(warn_free_percent=...)`, wired in `run_diagnostics`.
+- Test: `test_gpu_vram_threshold_is_configurable` (fails without the change: no field/parameter).
+- Suite: 56 passed (baseline 55, python3.11; 3.12 not the default interpreter here).
+- Remaining F073 gap: per-service checks.
+- Decision: supersedes the hardcoded-5% decision; default unchanged, reversible.

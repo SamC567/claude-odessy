@@ -69,6 +69,7 @@ class HealthConfig(BaseModel):
     model_check_timeout_seconds: float = Field(default=3.0, gt=0)
     ram_warn_available_percent: float = Field(default=15.0, ge=0, le=100)
     ram_critical_available_percent: float = Field(default=5.0, ge=0, le=100)
+    gpu_vram_warn_free_percent: float = Field(default=5.0, ge=0, le=100)
 
     @model_validator(mode="after")
     def _thresholds_are_ordered(self) -> "HealthConfig":

@@ -204,7 +204,7 @@ def _read_gpus() -> list[tuple[str, int, int]] | None:
         return None
 
 
-def check_gpu(gpu_reader=_read_gpus) -> CheckResult:
+def check_gpu(gpu_reader=_read_gpus, warn_free_percent: float = 5.0) -> CheckResult:
     """Report NVIDIA GPU / VRAM headroom (F073). Read-only.
 
     No GPU is OK (the GPU is optional; the echo fallback needs none). A query
@@ -216,7 +216,7 @@ def check_gpu(gpu_reader=_read_gpus) -> CheckResult:
     if not gpus:
         return CheckResult("gpu", CheckStatus.OK, "no NVIDIA GPU detected (optional)")
     detail = "; ".join(f"{n}: {f}/{t} MiB VRAM free" for n, t, f in gpus)
-    low = [n for n, t, f in gpus if t > 0 and f / t * 100 <= 5.0]
+    low = [n for n, t, f in gpus if t > 0 and f / t * 100 <= warn_free_percent]
     if low:
         return CheckResult("gpu", CheckStatus.WARNING, "VRAM nearly full on " + ", ".join(low) + "; " + detail)
     return CheckResult("gpu", CheckStatus.OK, detail)
@@ -282,7 +282,10 @@ def run_diagnostics(
                 memory_reader=_read_memory_bytes,
             ),
         ),
-        _safe_check("gpu", check_gpu),
+        _safe_check(
+            "gpu",
+            lambda: check_gpu(warn_free_percent=config.health.gpu_vram_warn_free_percent),
+        ),
         _safe_check("config", lambda: check_config(config)),
         _safe_check("memory_store", lambda: check_memory_store(memory_store)),
         _safe_check("model_provider", lambda: check_model_provider(model_provider)),
