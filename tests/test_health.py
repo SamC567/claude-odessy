@@ -115,3 +115,16 @@ def test_run_diagnostics_uses_configured_ram_thresholds(tmp_path, monkeypatch):
     assert hw(strict).status == CheckStatus.WARNING
     strict.health.ram_critical_available_percent = 50.0
     assert hw(strict).status == CheckStatus.CRITICAL
+
+
+def test_gpu_check_states_and_in_report(tmp_path):
+    from odysseus.health.diagnostics import check_gpu
+
+    assert check_gpu(lambda: []).status == CheckStatus.OK
+    assert check_gpu(lambda: None).status == CheckStatus.WARNING
+    assert check_gpu(lambda: [("RTX", 8000, 4000)]).status == CheckStatus.OK
+    full = check_gpu(lambda: [("RTX", 8000, 100)])
+    assert full.status == CheckStatus.WARNING and "RTX" in full.detail
+    memory = MemoryStore(tmp_path / "mem.sqlite3")
+    report = run_diagnostics(OdysseusConfig(), memory, EchoProvider(), disk_path=tmp_path)
+    assert any(c.name == "gpu" for c in report.checks)

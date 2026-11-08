@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import sys
 from importlib import metadata
 from dataclasses import dataclass, field
@@ -164,7 +165,7 @@ def check_hardware(
 ) -> CheckResult:
     """Report CPU count and RAM headroom (F073). Read-only, stdlib only.
 
-    GPU/VRAM detection is intentionally not included yet.
+    GPU/VRAM is covered separately by ``check_gpu``.
     """
     cpus = os.cpu_count() or 0
     mem = memory_reader()
@@ -181,6 +182,44 @@ def check_hardware(
     if avail_pct <= warn_available_percent:
         return CheckResult("hardware", CheckStatus.WARNING, detail)
     return CheckResult("hardware", CheckStatus.OK, detail)
+
+
+def _read_gpus() -> list[tuple[str, int, int]] | None:
+    """Return [(name, total_mib, free_mib)] via nvidia-smi, [] if no NVIDIA GPU,
+    or None if the query failed. Local subprocess only, no network."""
+    exe = shutil.which("nvidia-smi")
+    if exe is None:
+        return []
+    try:
+        out = subprocess.run(
+            [exe, "--query-gpu=name,memory.total,memory.free", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5, check=True,
+        ).stdout
+        gpus = []
+        for line in out.strip().splitlines():
+            name, total, free = (p.strip() for p in line.rsplit(",", 2))
+            gpus.append((name, int(total), int(free)))
+        return gpus
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
+def check_gpu(gpu_reader=_read_gpus) -> CheckResult:
+    """Report NVIDIA GPU / VRAM headroom (F073). Read-only.
+
+    No GPU is OK (the GPU is optional; the echo fallback needs none). A query
+    that fails is a WARNING. Other vendors (AMD/Apple) are not detected yet.
+    """
+    gpus = gpu_reader()
+    if gpus is None:
+        return CheckResult("gpu", CheckStatus.WARNING, "nvidia-smi present but query failed")
+    if not gpus:
+        return CheckResult("gpu", CheckStatus.OK, "no NVIDIA GPU detected (optional)")
+    detail = "; ".join(f"{n}: {f}/{t} MiB VRAM free" for n, t, f in gpus)
+    low = [n for n, t, f in gpus if t > 0 and f / t * 100 <= 5.0]
+    if low:
+        return CheckResult("gpu", CheckStatus.WARNING, "VRAM nearly full on " + ", ".join(low) + "; " + detail)
+    return CheckResult("gpu", CheckStatus.OK, detail)
 
 
 def check_config(config: OdysseusConfig) -> CheckResult:
@@ -243,6 +282,7 @@ def run_diagnostics(
                 memory_reader=_read_memory_bytes,
             ),
         ),
+        _safe_check("gpu", check_gpu),
         _safe_check("config", lambda: check_config(config)),
         _safe_check("memory_store", lambda: check_memory_store(memory_store)),
         _safe_check("model_provider", lambda: check_model_provider(model_provider)),

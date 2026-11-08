@@ -84,3 +84,11 @@ Append-only log of scheduled-run changes.
 - Fix: `query` returns `[]` for blank text or `limit <= 0`.
 - Test: `test_blank_query_or_nonpositive_limit_returns_nothing` (fails without the change, verified via stash).
 - Suite: 54 passed (baseline 53, python3.13).
+
+## 2026-11-08 — F073 GPU/VRAM diagnostics
+- Gap: no GPU/VRAM visibility in diagnostics (listed remaining F073 gap).
+- Fix: `check_gpu` in `odysseus/health/diagnostics.py` (nvidia-smi local subprocess, injectable reader), wired into `run_diagnostics`.
+- Test: `test_gpu_check_states_and_in_report` (fails without the change: no `check_gpu`).
+- Suite: 55 passed (baseline 54, python3.11; no real GPU available in cloud run).
+- Remaining F073 gap: per-service checks, configurable VRAM threshold.
+- Decision: no GPU reported as OK (optional hardware); 5% free-VRAM warn threshold hardcoded, reversible.
