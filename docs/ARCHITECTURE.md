@@ -101,5 +101,10 @@ odysseus/
   otherwise unchanged.
 - `health.diagnostics` gained `check_dependencies` (F073): reports
   installed versions of pydantic/PyYAML/requests via package metadata,
-  CRITICAL if any are missing. Still not covered: hardware (CPU/RAM/GPU)
+  CRITICAL if any are missing. Still not covered: GPU/VRAM
   and per-service checks beyond the model provider.
+- `health.diagnostics` gained `check_hardware` (F073): CPU count and RAM
+  headroom (stdlib only: /proc/meminfo on Linux, GlobalMemoryStatusEx on
+  Windows; the Windows path is untested here). Thresholds are function
+  defaults (warn <=15% available, critical <=5%), not yet in config.
+  Unknown RAM is a WARNING.

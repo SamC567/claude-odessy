@@ -7,6 +7,7 @@ raising never prevents the others from running or from being reported.
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from importlib import metadata
@@ -117,6 +118,71 @@ def check_dependencies(required: tuple[str, ...] = REQUIRED_DEPENDENCIES) -> Che
     return CheckResult("dependencies", CheckStatus.OK, ", ".join(versions))
 
 
+def _read_memory_bytes() -> tuple[int, int] | None:
+    """Return (total, available) physical RAM in bytes, or None if unknown.
+
+    Stdlib only: /proc/meminfo on Linux, GlobalMemoryStatusEx on Windows.
+    """
+    meminfo = Path("/proc/meminfo")
+    if meminfo.exists():
+        values: dict[str, int] = {}
+        for line in meminfo.read_text().splitlines():
+            key, _, rest = line.partition(":")
+            parts = rest.split()
+            if parts and parts[0].isdigit():
+                values[key] = int(parts[0]) * 1024
+        if "MemTotal" in values and "MemAvailable" in values:
+            return values["MemTotal"], values["MemAvailable"]
+        return None
+    if sys.platform == "win32":
+        import ctypes
+
+        class _MemStatus(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong),
+                ("dwMemoryLoad", ctypes.c_ulong),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+
+        status = _MemStatus()
+        status.dwLength = ctypes.sizeof(_MemStatus)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+            return status.ullTotalPhys, status.ullAvailPhys
+    return None
+
+
+def check_hardware(
+    warn_available_percent: float = 15.0,
+    critical_available_percent: float = 5.0,
+    memory_reader=_read_memory_bytes,
+) -> CheckResult:
+    """Report CPU count and RAM headroom (F073). Read-only, stdlib only.
+
+    GPU/VRAM detection is intentionally not included yet.
+    """
+    cpus = os.cpu_count() or 0
+    mem = memory_reader()
+    if mem is None or mem[0] <= 0:
+        return CheckResult(
+            "hardware", CheckStatus.WARNING, f"cpus={cpus}; RAM could not be determined"
+        )
+    total, available = mem
+    avail_pct = available / total * 100
+    gib = 1024**3
+    detail = f"cpus={cpus}; RAM {available / gib:.1f}/{total / gib:.1f} GiB available ({avail_pct:.1f}%)"
+    if avail_pct <= critical_available_percent:
+        return CheckResult("hardware", CheckStatus.CRITICAL, detail)
+    if avail_pct <= warn_available_percent:
+        return CheckResult("hardware", CheckStatus.WARNING, detail)
+    return CheckResult("hardware", CheckStatus.OK, detail)
+
+
 def check_config(config: OdysseusConfig) -> CheckResult:
     # Config already passed pydantic validation to exist as an OdysseusConfig,
     # so this check focuses on policy-level sanity, not just schema validity.
@@ -169,6 +235,7 @@ def run_diagnostics(
             ),
         ),
         _safe_check("dependencies", check_dependencies),
+        _safe_check("hardware", check_hardware),
         _safe_check("config", lambda: check_config(config)),
         _safe_check("memory_store", lambda: check_memory_store(memory_store)),
         _safe_check("model_provider", lambda: check_model_provider(model_provider)),

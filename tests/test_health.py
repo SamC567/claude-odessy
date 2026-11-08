@@ -77,3 +77,21 @@ def test_run_diagnostics_includes_dependencies(tmp_path):
     memory = MemoryStore(tmp_path / "mem.sqlite3")
     report = run_diagnostics(OdysseusConfig(), memory, EchoProvider(), disk_path=tmp_path)
     assert any(c.name == "dependencies" for c in report.checks)
+
+
+def test_hardware_check_thresholds_and_unknown():
+    from odysseus.health.diagnostics import check_hardware
+
+    gib = 1024**3
+    assert check_hardware(memory_reader=lambda: (16 * gib, 8 * gib)).status == CheckStatus.OK
+    assert check_hardware(memory_reader=lambda: (16 * gib, 2 * gib)).status == CheckStatus.WARNING
+    crit = check_hardware(memory_reader=lambda: (16 * gib, gib // 4))
+    assert crit.status == CheckStatus.CRITICAL
+    assert "cpus=" in crit.detail
+    assert check_hardware(memory_reader=lambda: None).status == CheckStatus.WARNING
+
+
+def test_run_diagnostics_includes_hardware(tmp_path):
+    memory = MemoryStore(tmp_path / "mem.sqlite3")
+    report = run_diagnostics(OdysseusConfig(), memory, EchoProvider(), disk_path=tmp_path)
+    assert any(c.name == "hardware" for c in report.checks)
