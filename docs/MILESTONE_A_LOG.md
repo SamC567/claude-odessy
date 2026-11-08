@@ -42,3 +42,11 @@ Append-only log of scheduled-run changes.
 - Fix: `build_provider(config, allow_external=False)` in `odysseus/models/registry.py` falls back to echo (audited as `model_provider_blocked`) for non-loopback hosts; CLI passes the identity flag.
 - Test: `test_non_loopback_base_url_blocked_unless_external_allowed` (fails without the change: no such parameter/behaviour).
 - Suite: 48 passed (baseline 47, python3.12 venv).
+
+## 2026-11-08 — F073 configurable RAM thresholds
+- Gap: hardware check thresholds were hardcoded function defaults, not configurable.
+- Fix: `health.ram_warn_available_percent` / `ram_critical_available_percent` in `HealthConfig` + `config/default.yaml`; `run_diagnostics` passes them to `check_hardware`.
+- Test: `test_run_diagnostics_uses_configured_ram_thresholds` (fails without the change: fields don't exist / defaults ignored).
+- Suite: 49 passed (baseline 48, python3.12 venv).
+- Remaining F073 gap: GPU/VRAM, per-service checks.
+- Decision: supersedes the earlier "thresholds as function defaults" decision; defaults unchanged so behaviour is identical unless configured (reversible).

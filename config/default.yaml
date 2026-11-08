@@ -23,5 +23,7 @@ health:
   disk_warn_percent: 85.0
   disk_critical_percent: 95.0
   model_check_timeout_seconds: 3.0
+  ram_warn_available_percent: 15.0      # warn when available RAM <= this %
+  ram_critical_available_percent: 5.0   # critical when available RAM <= this %
 
 log_level: INFO

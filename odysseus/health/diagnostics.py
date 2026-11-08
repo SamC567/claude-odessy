@@ -235,7 +235,14 @@ def run_diagnostics(
             ),
         ),
         _safe_check("dependencies", check_dependencies),
-        _safe_check("hardware", check_hardware),
+        _safe_check(
+            "hardware",
+            lambda: check_hardware(
+                config.health.ram_warn_available_percent,
+                config.health.ram_critical_available_percent,
+                memory_reader=_read_memory_bytes,
+            ),
+        ),
         _safe_check("config", lambda: check_config(config)),
         _safe_check("memory_store", lambda: check_memory_store(memory_store)),
         _safe_check("model_provider", lambda: check_model_provider(model_provider)),

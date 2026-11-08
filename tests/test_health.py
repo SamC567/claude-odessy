@@ -95,3 +95,23 @@ def test_run_diagnostics_includes_hardware(tmp_path):
     memory = MemoryStore(tmp_path / "mem.sqlite3")
     report = run_diagnostics(OdysseusConfig(), memory, EchoProvider(), disk_path=tmp_path)
     assert any(c.name == "hardware" for c in report.checks)
+
+
+def test_run_diagnostics_uses_configured_ram_thresholds(tmp_path, monkeypatch):
+    from odysseus.health import diagnostics
+
+    gib = 1024**3
+    monkeypatch.setattr(diagnostics, "_read_memory_bytes", lambda: (16 * gib, 8 * gib))
+    memory = MemoryStore(tmp_path / "mem.sqlite3")
+
+    def hw(cfg):
+        report = run_diagnostics(cfg, memory, EchoProvider(), disk_path=tmp_path)
+        return next(c for c in report.checks if c.name == "hardware")
+
+    assert hw(OdysseusConfig()).status == CheckStatus.OK  # 50% available
+    strict = OdysseusConfig(
+        health={"ram_warn_available_percent": 60.0, "ram_critical_available_percent": 40.0}
+    )
+    assert hw(strict).status == CheckStatus.WARNING
+    strict.health.ram_critical_available_percent = 50.0
+    assert hw(strict).status == CheckStatus.CRITICAL

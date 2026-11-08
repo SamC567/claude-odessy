@@ -67,6 +67,8 @@ class HealthConfig(BaseModel):
     disk_warn_percent: float = Field(default=85.0, ge=0, le=100)
     disk_critical_percent: float = Field(default=95.0, ge=0, le=100)
     model_check_timeout_seconds: float = Field(default=3.0, gt=0)
+    ram_warn_available_percent: float = Field(default=15.0, ge=0, le=100)
+    ram_critical_available_percent: float = Field(default=5.0, ge=0, le=100)
 
 
 class IdentityConfig(BaseModel):

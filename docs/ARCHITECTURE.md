@@ -105,8 +105,9 @@ odysseus/
   and per-service checks beyond the model provider.
 - `health.diagnostics` gained `check_hardware` (F073): CPU count and RAM
   headroom (stdlib only: /proc/meminfo on Linux, GlobalMemoryStatusEx on
-  Windows; the Windows path is untested here). Thresholds are function
-  defaults (warn <=15% available, critical <=5%), not yet in config.
+  Windows; the Windows path is untested here). Thresholds are now
+  configurable via `health.ram_warn_available_percent` (default 15) and
+  `health.ram_critical_available_percent` (default 5).
   Unknown RAM is a WARNING.
 - `MemoryStore.retract(id, reviewer)` (F009): withdraws an APPROVED entry
   (status -> REJECTED, row and provenance kept, audited with
