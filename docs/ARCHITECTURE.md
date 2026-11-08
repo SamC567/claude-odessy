@@ -108,3 +108,8 @@ odysseus/
   Windows; the Windows path is untested here). Thresholds are function
   defaults (warn <=15% available, critical <=5%), not yet in config.
   Unknown RAM is a WARNING.
+- `MemoryStore.retract(id, reviewer)` (F009): withdraws an APPROVED entry
+  (status -> REJECTED, row and provenance kept, audited with
+  `previous=approved`); CLI: `memory forget <id>`. Closes the "no way to
+  undo an approval" reversibility gap. Re-approving a retracted entry is
+  not supported (submit a new candidate instead).

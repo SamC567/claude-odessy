@@ -96,6 +96,13 @@ def cmd_memory_reject(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_memory_forget(args: argparse.Namespace) -> int:
+    orchestrator, _ = _build_orchestrator(args.config)
+    entry = orchestrator.memory.retract(args.entry_id, reviewer=args.reviewer)
+    print(f"Retracted [{entry.id}] (no longer used in answers)")
+    return 0
+
+
 def cmd_config_show(args: argparse.Namespace) -> int:
     _, config = _build_orchestrator(args.config)
     print(config.model_dump_json(indent=2))
@@ -137,6 +144,11 @@ def build_parser() -> argparse.ArgumentParser:
     reject.add_argument("entry_id", type=int)
     reject.add_argument("--reviewer", default="cli-user")
     reject.set_defaults(func=cmd_memory_reject)
+
+    forget = memory_sub.add_parser("forget", help="Retract a previously approved entry")
+    forget.add_argument("entry_id", type=int)
+    forget.add_argument("--reviewer", default="cli-user")
+    forget.set_defaults(func=cmd_memory_forget)
 
     config_cmd = sub.add_parser("config", help="Inspect effective configuration")
     config_sub = config_cmd.add_subparsers(dest="config_command", required=True)

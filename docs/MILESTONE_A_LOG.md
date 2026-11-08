@@ -26,6 +26,13 @@ Append-only log of scheduled-run changes.
 - Suite: 46 passed (baseline 44, python3.13).
 - Remaining F073 gap: GPU/VRAM, per-service checks, thresholds in config.
 
+## 2026-11-08 — F009 retract approved memory
+- Gap: an approved memory could never be withdrawn (no reversibility; only PENDING could be reviewed).
+- Fix: `MemoryStore.retract` (approved -> rejected, row kept, audited) + `memory forget` CLI command; `_review` takes an `expected` status.
+- Test: `test_retract_removes_approved_entry_from_query` (fails without the change, verified via stash).
+- Suite: 47 passed (baseline 46, python3.12 venv).
+
 ### Decisions
 - Hardware thresholds kept as function defaults rather than adding config schema fields (reversible, no config contract change).
 - Windows RAM path (ctypes) written but not run in this Linux cloud run.
+- Retracted entries reuse the REJECTED status rather than adding a new enum value (no schema change, reversible to change later); re-approval deliberately unsupported.

@@ -104,3 +104,22 @@ def test_query_treats_like_wildcards_literally(memory_store: MemoryStore):
     assert [e.content for e in memory_store.query("snake_case")] == ["snake_case naming"]
     # '_' must not act as a single-char wildcard (would also match snakeXcase).
     # '%' must not act as a wildcard (would also match "100 percent sure").
+
+
+def test_retract_removes_approved_entry_from_query(memory_store: MemoryStore):
+    stored = memory_store.submit_candidate(
+        MemoryEntry(content="Prefers tea", source="user", confidence=0.9)
+    )
+    # Pending entries cannot be retracted (nothing to withdraw yet).
+    with pytest.raises(ReviewInboxError):
+        memory_store.retract(stored.id, reviewer="me")
+    memory_store.approve(stored.id, reviewer="me")
+    assert memory_store.query("tea")
+
+    retracted = memory_store.retract(stored.id, reviewer="me")
+    assert retracted.status == MemoryStatus.REJECTED
+    assert memory_store.query("tea") == []
+    # Row is kept for provenance, and cannot be retracted twice.
+    assert memory_store.get(stored.id) is not None
+    with pytest.raises(ReviewInboxError):
+        memory_store.retract(stored.id, reviewer="me")

@@ -197,14 +197,31 @@ class MemoryStore:
     def reject(self, entry_id: int, reviewer: str) -> MemoryEntry:
         return self._review(entry_id, MemoryStatus.REJECTED, reviewer)
 
-    def _review(self, entry_id: int, status: MemoryStatus, reviewer: str) -> MemoryEntry:
+    def retract(self, entry_id: int, reviewer: str) -> MemoryEntry:
+        """Withdraw a previously APPROVED entry (it becomes REJECTED).
+
+        The row is kept (not deleted) so provenance and the audit trail
+        survive and the action is inspectable; the entry simply stops
+        being returned by ``query``.
+        """
+        return self._review(
+            entry_id, MemoryStatus.REJECTED, reviewer, expected=MemoryStatus.APPROVED
+        )
+
+    def _review(
+        self,
+        entry_id: int,
+        status: MemoryStatus,
+        reviewer: str,
+        expected: MemoryStatus = MemoryStatus.PENDING,
+    ) -> MemoryEntry:
         existing = self.get(entry_id)
         if existing is None:
             raise ReviewInboxError(f"No memory entry with id={entry_id}")
-        if existing.status != MemoryStatus.PENDING:
+        if existing.status != expected:
             raise ReviewInboxError(
-                f"Entry {entry_id} is already {existing.status.value}; "
-                "only pending entries can be reviewed"
+                f"Entry {entry_id} is {existing.status.value}; "
+                f"only {expected.value} entries can be {status.value} here"
             )
         now = datetime.now(timezone.utc)
         with closing(self._connect()) as conn:
@@ -217,7 +234,13 @@ class MemoryStore:
                 conn.commit()
             except sqlite3.Error as exc:
                 raise MemoryError_(f"Could not update memory entry {entry_id}: {exc}") from exc
-        audit("memory.review", id=entry_id, decision=status.value, reviewer=reviewer)
+        audit(
+            "memory.review",
+            id=entry_id,
+            decision=status.value,
+            reviewer=reviewer,
+            previous=expected.value,
+        )
         updated = self.get(entry_id)
         assert updated is not None
         return updated
