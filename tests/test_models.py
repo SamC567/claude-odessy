@@ -114,3 +114,11 @@ def test_registry_builds_ollama():
 def test_registry_falls_back_to_echo_for_unknown_provider():
     provider = build_provider(ModelProviderConfig(provider="some-future-cloud-model"))
     assert isinstance(provider, EchoProvider)
+
+
+def test_non_loopback_base_url_blocked_unless_external_allowed():
+    cfg = ModelProviderConfig(provider="ollama", base_url="http://models.example.com:11434")
+    assert build_provider(cfg).name == "echo"
+    assert build_provider(cfg, allow_external=True).name == "ollama"
+    for local in ("http://localhost:1", "http://127.0.0.1:1", "http://[::1]:1"):
+        assert build_provider(ModelProviderConfig(provider="ollama", base_url=local)).name == "ollama"

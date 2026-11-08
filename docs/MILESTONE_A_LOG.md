@@ -36,3 +36,9 @@ Append-only log of scheduled-run changes.
 - Hardware thresholds kept as function defaults rather than adding config schema fields (reversible, no config contract change).
 - Windows RAM path (ctypes) written but not run in this Linux cloud run.
 - Retracted entries reuse the REJECTED status rather than adding a new enum value (no schema change, reversible to change later); re-approval deliberately unsupported.
+
+## 2026-11-08 — F003 enforce loopback-only model endpoint
+- Gap: `identity.allow_external_providers=false` was not enforced; an `ollama` provider with a non-loopback `base_url` would send prompts off-machine (violates local-first principle).
+- Fix: `build_provider(config, allow_external=False)` in `odysseus/models/registry.py` falls back to echo (audited as `model_provider_blocked`) for non-loopback hosts; CLI passes the identity flag.
+- Test: `test_non_loopback_base_url_blocked_unless_external_allowed` (fails without the change: no such parameter/behaviour).
+- Suite: 48 passed (baseline 47, python3.12 venv).

@@ -113,3 +113,8 @@ odysseus/
   `previous=approved`); CLI: `memory forget <id>`. Closes the "no way to
   undo an approval" reversibility gap. Re-approving a retracted entry is
   not supported (submit a new candidate instead).
+- `build_provider(config, allow_external=False)` (F003) now enforces
+  `identity.allow_external_providers`: an `ollama` provider whose `base_url`
+  is not loopback (localhost / 127.0.0.0/8 / ::1) is replaced by the echo
+  fallback and audited as `model_provider_blocked`. Hostnames other than
+  `localhost` are treated as non-loopback (no DNS resolution).

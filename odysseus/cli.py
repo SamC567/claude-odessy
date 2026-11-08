@@ -31,7 +31,7 @@ def _build_orchestrator(config_path: str | None) -> tuple[Orchestrator, object]:
     config = load_config(config_path)
     configure_logging(config.log_level, audit_log_path="data/audit.log")
     identity = JarvisIdentity.from_config(config.identity)
-    provider = build_provider(config.model)
+    provider = build_provider(config.model, config.identity.allow_external_providers)
     memory = MemoryStore(config.memory.db_path, config.memory.auto_approve_threshold)
     orchestrator = Orchestrator(identity=identity, provider=provider, memory=memory)
     return orchestrator, config
