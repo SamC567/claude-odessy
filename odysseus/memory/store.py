@@ -199,6 +199,10 @@ class MemoryStore:
         Pending/rejected entries are never surfaced to normal retrieval --
         only reviewed, permanent memory is queryable this way.
         """
+        if not text.strip() or limit <= 0:
+            # A blank query would otherwise match every approved entry, and a
+            # negative LIMIT means "no limit" in SQLite.
+            return []
         words = [w for w in text.split() if len(w) >= 3]
         patterns = {text} | set(words)
         clauses = " OR ".join(["content LIKE ? ESCAPE '\\'"] * len(patterns))

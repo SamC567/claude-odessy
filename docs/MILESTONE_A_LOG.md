@@ -78,3 +78,9 @@ Append-only log of scheduled-run changes.
 - Fix: `memory list-approved` command in `odysseus/cli.py` (shows id, confidence, source, reviewer).
 - Test: `test_cli_memory_list_approved_and_forget` (fails without the change: unknown subcommand).
 - Suite: 53 passed (baseline 52, python3.13).
+
+## 2026-11-08 — F009 blank query / non-positive limit
+- Gap: `MemoryStore.query("")` matched every approved memory (`LIKE '%%'`) and a negative `limit` meant unlimited in SQLite.
+- Fix: `query` returns `[]` for blank text or `limit <= 0`.
+- Test: `test_blank_query_or_nonpositive_limit_returns_nothing` (fails without the change, verified via stash).
+- Suite: 54 passed (baseline 53, python3.13).

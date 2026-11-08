@@ -106,6 +106,19 @@ def test_query_treats_like_wildcards_literally(memory_store: MemoryStore):
     # '%' must not act as a wildcard (would also match "100 percent sure").
 
 
+def test_blank_query_or_nonpositive_limit_returns_nothing(memory_store: MemoryStore):
+    for text in ("Likes tea", "Likes coffee"):
+        stored = memory_store.submit_candidate(
+            MemoryEntry(content=text, source="user", confidence=0.9)
+        )
+        memory_store.approve(stored.id, reviewer="tester")
+    assert memory_store.query("") == []
+    assert memory_store.query("   ") == []
+    assert memory_store.query("Likes", limit=0) == []
+    assert memory_store.query("Likes", limit=-1) == []
+    assert len(memory_store.query("Likes", limit=1)) == 1
+
+
 def test_retract_removes_approved_entry_from_query(memory_store: MemoryStore):
     stored = memory_store.submit_candidate(
         MemoryEntry(content="Prefers tea", source="user", confidence=0.9)

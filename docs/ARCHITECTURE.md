@@ -95,6 +95,9 @@ odysseus/
 
 ## Recent fixes
 
+- `MemoryStore.query` (F009) returns nothing for a blank query or a
+  non-positive `limit` (previously a blank query matched every approved
+  entry and a negative limit disabled the cap).
 - CLI `memory list-approved` (F009) lists approved memories with id, source,
   confidence and reviewer, so the id needed by `memory forget` is discoverable.
 
