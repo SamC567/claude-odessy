@@ -38,6 +38,11 @@ CREATE INDEX IF NOT EXISTS idx_memory_status ON memory_entries(status);
 """
 
 
+def _escape_like(term: str) -> str:
+    """Escape SQL LIKE wildcards so user text is matched literally."""
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _row_to_entry(row: sqlite3.Row) -> MemoryEntry:
     return MemoryEntry(
         id=row["id"],
@@ -171,9 +176,9 @@ class MemoryStore:
         """
         words = [w for w in text.split() if len(w) >= 3]
         patterns = {text} | set(words)
-        clauses = " OR ".join(["content LIKE ?"] * len(patterns))
+        clauses = " OR ".join(["content LIKE ? ESCAPE '\\'"] * len(patterns))
         params: list[object] = [MemoryStatus.APPROVED.value]
-        params.extend(f"%{p}%" for p in patterns)
+        params.extend(f"%{_escape_like(p)}%" for p in patterns)
         params.append(limit)
         with closing(self._connect()) as conn:
             rows = conn.execute(

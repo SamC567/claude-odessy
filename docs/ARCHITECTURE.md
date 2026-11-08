@@ -92,3 +92,10 @@ odysseus/
   Ollama binary). It talks to the standard `/api/generate` and
   `/api/tags` endpoints and has not been exercised against a live
   Ollama process. Verify this first against a real local install.
+
+## Recent fixes
+
+- `MemoryStore.query` now escapes SQL `LIKE` wildcards (`%`, `_`, `\`) in
+  user text, so e.g. `100%` or `snake_case` match literally instead of
+  acting as wildcards. Keyword/substring retrieval limitation above is
+  otherwise unchanged.

@@ -92,3 +92,15 @@ def test_store_persists_across_instances(tmp_path):
     stored = store1.submit_candidate(MemoryEntry(content="x", source="s", confidence=0.5))
     store2 = MemoryStore(db_path)
     assert store2.get(stored.id) is not None
+
+
+def test_query_treats_like_wildcards_literally(memory_store: MemoryStore):
+    for text in ("Battery is at 100% charge", "snake_case naming", "snakeXcase naming", "100 percent sure"):
+        stored = memory_store.submit_candidate(
+            MemoryEntry(content=text, source="user", confidence=0.9)
+        )
+        memory_store.approve(stored.id, reviewer="tester")
+    assert [e.content for e in memory_store.query("100%")] == ["Battery is at 100% charge"]
+    assert [e.content for e in memory_store.query("snake_case")] == ["snake_case naming"]
+    # '_' must not act as a single-char wildcard (would also match snakeXcase).
+    # '%' must not act as a wildcard (would also match "100 percent sure").
