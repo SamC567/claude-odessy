@@ -123,3 +123,28 @@ def test_retract_removes_approved_entry_from_query(memory_store: MemoryStore):
     assert memory_store.get(stored.id) is not None
     with pytest.raises(ReviewInboxError):
         memory_store.retract(stored.id, reviewer="me")
+
+
+def test_duplicate_candidate_is_not_stored_twice(memory_store: MemoryStore):
+    first = memory_store.submit_candidate(
+        MemoryEntry(content="Prefers tea", source="user", confidence=0.9)
+    )
+    again = memory_store.submit_candidate(
+        MemoryEntry(content="  prefers   TEA ", source="chat", confidence=0.5)
+    )
+    assert again.id == first.id
+    assert len(memory_store.list_pending()) == 1
+
+    # Also deduplicated against approved memory.
+    memory_store.approve(first.id, reviewer="me")
+    assert memory_store.submit_candidate(
+        MemoryEntry(content="Prefers tea", source="chat", confidence=0.5)
+    ).id == first.id
+    assert memory_store.count_by_status() == {"approved": 1}
+
+    # A rejected entry may be proposed again.
+    memory_store.retract(first.id, reviewer="me")
+    redo = memory_store.submit_candidate(
+        MemoryEntry(content="Prefers tea", source="user", confidence=0.9)
+    )
+    assert redo.id != first.id

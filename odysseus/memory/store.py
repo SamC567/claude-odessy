@@ -91,6 +91,16 @@ class MemoryStore:
         confidence meets it -- an explicit, auditable opt-in rather than
         a silent default.
         """
+        duplicate = self._find_live_duplicate(entry.content)
+        if duplicate is not None:
+            audit(
+                "memory.duplicate_candidate",
+                id=duplicate.id,
+                source=entry.source,
+                status=duplicate.status.value,
+            )
+            return duplicate
+
         status = MemoryStatus.PENDING
         reviewed_at = None
         reviewer = None
@@ -134,6 +144,21 @@ class MemoryStore:
         stored = self.get(new_id)
         assert stored is not None
         return stored
+
+    def _find_live_duplicate(self, content: str) -> MemoryEntry | None:
+        """Existing PENDING/APPROVED entry with the same content (ignoring case
+        and surrounding/repeated whitespace), if any. REJECTED entries do not
+        count, so a previously rejected fact can be proposed again."""
+        wanted = " ".join(content.split()).casefold()
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT * FROM memory_entries WHERE status IN (?, ?) ORDER BY id ASC",
+                (MemoryStatus.PENDING.value, MemoryStatus.APPROVED.value),
+            ).fetchall()
+        for row in rows:
+            if " ".join(row["content"].split()).casefold() == wanted:
+                return _row_to_entry(row)
+        return None
 
     # -- Reading -------------------------------------------------------
 

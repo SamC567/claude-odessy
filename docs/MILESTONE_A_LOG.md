@@ -57,3 +57,10 @@ Append-only log of scheduled-run changes.
 - Test: `test_ollama_health_check_detects_missing_model` (fails without the change, verified via stash).
 - Suite: 50 passed (baseline 49, python3.13; python3.12 venv unavailable this run).
 - Remaining F073 gap: GPU/VRAM, per-service checks.
+
+## 2026-11-08 — F009 de-duplicate review-inbox candidates
+- Gap: submitting the same fact repeatedly created duplicate PENDING/APPROVED rows (inbox flooding, noted as a risk for future auto-extraction).
+- Fix: `MemoryStore.submit_candidate` returns the existing PENDING/APPROVED entry when content matches (case/whitespace-insensitive), audited as `memory.duplicate_candidate`. REJECTED/retracted entries don't count, so they can be re-proposed.
+- Test: `test_duplicate_candidate_is_not_stored_twice` (fails without the change, verified via stash).
+- Suite: 51 passed (baseline 50, python3.12 venv).
+- Decision: a duplicate submission keeps the original entry's source/confidence (no merge of provenance) — reversible; provenance merging can be added later.

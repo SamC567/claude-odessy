@@ -123,3 +123,8 @@ odysseus/
   `model_name` appears in `/api/tags` (bare names match `:latest`); a reachable
   server missing the model reports unhealthy (diagnostics WARNING). Tested
   against a simulated server only.
+- `MemoryStore.submit_candidate` (F009) now de-duplicates: identical content
+  (case/whitespace-insensitive) already PENDING or APPROVED returns the existing
+  entry instead of inserting another (audited `memory.duplicate_candidate`).
+  Rejected/retracted entries can be re-proposed. Source/confidence of the
+  duplicate submission are not merged.
