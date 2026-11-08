@@ -122,3 +122,16 @@ def test_non_loopback_base_url_blocked_unless_external_allowed():
     assert build_provider(cfg, allow_external=True).name == "ollama"
     for local in ("http://localhost:1", "http://127.0.0.1:1", "http://[::1]:1"):
         assert build_provider(ModelProviderConfig(provider="ollama", base_url=local)).name == "ollama"
+
+
+def test_ollama_health_check_detects_missing_model():
+    tags = _FakeResponse({"models": [{"name": "mistral:latest"}]})
+    provider = OllamaProvider(model_name="llama3", session=_FakeSession(get_result=tags))
+    healthy, detail = provider.health_check()
+    assert healthy is False
+    assert "llama3" in detail and "not installed" in detail and "mistral:latest" in detail
+
+    ok = _FakeResponse({"models": [{"name": "llama3:latest"}]})
+    assert OllamaProvider(model_name="llama3", session=_FakeSession(get_result=ok)).health_check()[0]
+    exact = _FakeResponse({"models": [{"name": "llama3:8b"}]})
+    assert OllamaProvider(model_name="llama3:8b", session=_FakeSession(get_result=exact)).health_check()[0]

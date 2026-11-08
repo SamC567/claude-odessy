@@ -50,3 +50,10 @@ Append-only log of scheduled-run changes.
 - Suite: 49 passed (baseline 48, python3.12 venv).
 - Remaining F073 gap: GPU/VRAM, per-service checks.
 - Decision: supersedes the earlier "thresholds as function defaults" decision; defaults unchanged so behaviour is identical unless configured (reversible).
+
+## 2026-11-08 — F073/F003 Ollama health check verifies configured model
+- Gap: `OllamaProvider.health_check` reported healthy whenever the server answered `/api/tags`, even if the configured `model_name` was not installed (generate would then fail).
+- Fix: health check now parses `/api/tags` and reports unhealthy (WARNING via diagnostics, echo fallback still available) when the model is absent; bare names match `:latest`; an unparseable list is treated as reachable.
+- Test: `test_ollama_health_check_detects_missing_model` (fails without the change, verified via stash).
+- Suite: 50 passed (baseline 49, python3.13; python3.12 venv unavailable this run).
+- Remaining F073 gap: GPU/VRAM, per-service checks.

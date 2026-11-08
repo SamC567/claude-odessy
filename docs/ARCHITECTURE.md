@@ -119,3 +119,7 @@ odysseus/
   is not loopback (localhost / 127.0.0.0/8 / ::1) is replaced by the echo
   fallback and audited as `model_provider_blocked`. Hostnames other than
   `localhost` are treated as non-loopback (no DNS resolution).
+- `OllamaProvider.health_check` (F073/F003) now also verifies the configured
+  `model_name` appears in `/api/tags` (bare names match `:latest`); a reachable
+  server missing the model reports unhealthy (diagnostics WARNING). Tested
+  against a simulated server only.

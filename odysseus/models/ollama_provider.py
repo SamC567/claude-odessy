@@ -92,4 +92,16 @@ class OllamaProvider(ModelProvider):
             resp.raise_for_status()
         except requests.exceptions.RequestException as exc:
             return False, f"Ollama server unreachable at {self.base_url}: {exc}"
-        return True, f"Ollama server reachable at {self.base_url}"
+        try:
+            models = resp.json().get("models", [])
+            names = {m.get("name", "") for m in models if isinstance(m, dict)}
+        except (ValueError, AttributeError):
+            # Reachable but unparseable /api/tags: don't claim the model is missing.
+            return True, f"Ollama server reachable at {self.base_url} (model list unreadable)"
+        wanted = self.model_name
+        if wanted in names or (":" not in wanted and f"{wanted}:latest" in names):
+            return True, f"Ollama server reachable at {self.base_url}; model {wanted!r} installed"
+        return False, (
+            f"Ollama server reachable at {self.base_url} but model {wanted!r} is not installed "
+            f"(installed: {', '.join(sorted(n for n in names if n)) or 'none'})"
+        )
