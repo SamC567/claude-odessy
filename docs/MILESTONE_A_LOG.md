@@ -64,3 +64,11 @@ Append-only log of scheduled-run changes.
 - Test: `test_duplicate_candidate_is_not_stored_twice` (fails without the change, verified via stash).
 - Suite: 51 passed (baseline 50, python3.12 venv).
 - Decision: a duplicate submission keeps the original entry's source/confidence (no merge of provenance) — reversible; provenance merging can be added later.
+
+## 2026-11-08 — F073/F001 validate health threshold ordering
+- Gap: config accepted inverted warn/critical thresholds (e.g. disk warn 95 / critical 85), silently producing misleading health statuses.
+- Fix: `model_validator` on `HealthConfig` in `odysseus/config.py`; load_config surfaces it as `ConfigError`.
+- Test: `test_inverted_health_thresholds_are_rejected` (fails without the change, verified via stash).
+- Suite: 52 passed (baseline 51, python3.13).
+- Remaining F073 gap: GPU/VRAM, per-service checks.
+- Decision: stricter validation could reject a user's existing odd config; defaults unaffected; reversible by removing the validator.

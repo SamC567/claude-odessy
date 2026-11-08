@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from odysseus.exceptions import ConfigError
 
@@ -69,6 +69,18 @@ class HealthConfig(BaseModel):
     model_check_timeout_seconds: float = Field(default=3.0, gt=0)
     ram_warn_available_percent: float = Field(default=15.0, ge=0, le=100)
     ram_critical_available_percent: float = Field(default=5.0, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _thresholds_are_ordered(self) -> "HealthConfig":
+        # Inverted thresholds would make the WARNING band unreachable and
+        # silently mislead operators, so reject them at load time.
+        if self.disk_warn_percent > self.disk_critical_percent:
+            raise ValueError("health.disk_warn_percent must be <= disk_critical_percent")
+        if self.ram_warn_available_percent < self.ram_critical_available_percent:
+            raise ValueError(
+                "health.ram_warn_available_percent must be >= ram_critical_available_percent"
+            )
+        return self
 
 
 class IdentityConfig(BaseModel):

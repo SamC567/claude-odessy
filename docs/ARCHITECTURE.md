@@ -128,3 +128,7 @@ odysseus/
   entry instead of inserting another (audited `memory.duplicate_candidate`).
   Rejected/retracted entries can be re-proposed. Source/confidence of the
   duplicate submission are not merged.
+- `HealthConfig` (F073/F001) now rejects inverted thresholds at load time
+  (`disk_warn_percent > disk_critical_percent`, or
+  `ram_warn_available_percent < ram_critical_available_percent`) with a
+  `ConfigError`, instead of silently making the WARNING band unreachable.

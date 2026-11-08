@@ -58,3 +58,16 @@ def test_invalid_value_raises(tmp_path):
     path.write_text("memory:\n  auto_approve_threshold: 5.0\n")  # out of 0..1 range
     with pytest.raises(ConfigError):
         load_config(path)
+
+
+def test_inverted_health_thresholds_are_rejected(tmp_path):
+    bad_disk = tmp_path / "disk.yaml"
+    bad_disk.write_text("health:\n  disk_warn_percent: 95\n  disk_critical_percent: 85\n")
+    with pytest.raises(ConfigError):
+        load_config(bad_disk)
+    bad_ram = tmp_path / "ram.yaml"
+    bad_ram.write_text(
+        "health:\n  ram_warn_available_percent: 5\n  ram_critical_available_percent: 15\n"
+    )
+    with pytest.raises(ConfigError):
+        load_config(bad_ram)
