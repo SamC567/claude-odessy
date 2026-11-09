@@ -108,3 +108,10 @@ Append-only log of scheduled-run changes.
 - Suite: 58 passed (baseline 56, python3.12 venv).
 - Remaining F073 gap: per-service checks beyond the model provider.
 - Decision: signature inspection used for backward compatibility instead of breaking the interface; reversible.
+
+## 2026-11-09 — F073/F009 memory DB integrity in health check
+- Gap: `memory_store` health check only counted rows; a corrupt SQLite file was not reported as such.
+- Fix: `MemoryStore.integrity_check()` (PRAGMA quick_check, never raises) used by `check_memory_store` -> CRITICAL on failure.
+- Test: `test_memory_store_check_detects_corrupt_database` (fails without the change, verified via stash).
+- Suite: 59 passed (baseline 58, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.

@@ -280,3 +280,17 @@ class MemoryStore:
                 "SELECT status, COUNT(*) as n FROM memory_entries GROUP BY status"
             ).fetchall()
         return {row["status"]: row["n"] for row in rows}
+
+    def integrity_check(self) -> tuple[bool, str]:
+        """Run SQLite ``PRAGMA quick_check`` (F009/F073). Read-only.
+
+        Returns (ok, detail); never raises on database errors.
+        """
+        try:
+            with closing(self._connect()) as conn:
+                rows = [r[0] for r in conn.execute("PRAGMA quick_check").fetchall()]
+        except (sqlite3.Error, MemoryError_) as exc:
+            return False, str(exc)
+        if rows == ["ok"]:
+            return True, "ok"
+        return False, "; ".join(str(r) for r in rows[:5])

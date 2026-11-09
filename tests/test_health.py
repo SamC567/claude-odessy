@@ -162,3 +162,19 @@ def test_run_diagnostics_passes_configured_model_check_timeout(tmp_path):
     check_model_provider(_Timed(), 2.5)
     assert seen == [2.5]
     assert check_model_provider(_Legacy(), 2.5).status.value == "ok"
+
+
+def test_memory_store_check_detects_corrupt_database(tmp_path):
+    from odysseus.health.diagnostics import CheckStatus, check_memory_store
+
+    db = tmp_path / "mem.sqlite3"
+    store = MemoryStore(db)
+    assert store.integrity_check() == (True, "ok")
+    assert check_memory_store(store).status == CheckStatus.OK
+    # Corrupt the file in place (keep the header, clobber later pages).
+    data = bytearray(db.read_bytes())
+    for i in range(100, len(data)):
+        data[i] = 0xFF
+    db.write_bytes(bytes(data))
+    result = check_memory_store(store)
+    assert result.status == CheckStatus.CRITICAL

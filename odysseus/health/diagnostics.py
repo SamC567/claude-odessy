@@ -239,6 +239,13 @@ def check_config(config: OdysseusConfig) -> CheckResult:
 
 
 def check_memory_store(store: MemoryStore) -> CheckResult:
+    ok, problem = store.integrity_check()
+    if not ok:
+        return CheckResult(
+            "memory_store",
+            CheckStatus.CRITICAL,
+            f"integrity check failed: {problem}; db={store.db_path}",
+        )
     counts = store.count_by_status()
     pending = counts.get("pending", 0)
     detail = f"db={store.db_path} counts={counts}"
