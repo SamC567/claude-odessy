@@ -277,3 +277,15 @@ def test_audit_log_check_warns_when_not_writable_and_ok_otherwise(tmp_path, monk
     check = next(c for c in report.checks if c.name == "audit_log")
     assert check.status == CheckStatus.WARNING
     assert "not writable" in check.detail
+
+
+def test_audit_log_check_warns_when_path_is_wrong_kind_of_entry(tmp_path):
+    from odysseus.health.diagnostics import check_audit_log
+
+    blocker = tmp_path / "logs"
+    blocker.write_text("not a directory")  # file where the log dir should be
+    assert check_audit_log(blocker / "audit.log").status == CheckStatus.WARNING
+
+    as_dir = tmp_path / "audit.log"
+    as_dir.mkdir()  # directory where the log file should be
+    assert check_audit_log(as_dir).status == CheckStatus.WARNING

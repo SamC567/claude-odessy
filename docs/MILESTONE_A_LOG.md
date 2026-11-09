@@ -264,3 +264,11 @@ Append-only log of scheduled-run changes.
 - Suite: 80 passed (baseline 79, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: strict rejection (ValueError, same as other fields) rather than coercion; reversible.
+
+## 2026-11-09 — F073 audit log check detects wrong entry type
+- Gap: `check_audit_log` reported OK when a regular file sat where the log directory should be, or a directory where the log file should be.
+- Fix: OK requires the log path to be a file (if it exists) or its nearest existing ancestor to be a directory, as well as writable.
+- Test: `test_audit_log_check_warns_when_path_is_wrong_kind_of_entry` (fails without the change, verified via stash).
+- Suite: 81 passed (baseline 80, python3.11).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: WARNING (consistent with the existing audit_log check); reversible.

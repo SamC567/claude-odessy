@@ -300,7 +300,12 @@ def check_audit_log(path: Path) -> CheckResult:
     # Walk up to the nearest existing ancestor (the log dir is created lazily).
     while not target.exists() and target != target.parent:
         target = target.parent
-    if os.access(target, os.W_OK):
+    # The log file itself, or else a directory that can hold it. A regular file
+    # standing where the log directory should be (or a directory where the log
+    # file should be) means audit records cannot be written even if os.access
+    # reports W_OK.
+    right_kind = path.is_file() if target == path else target.is_dir()
+    if right_kind and os.access(target, os.W_OK):
         return CheckResult("audit_log", CheckStatus.OK, f"audit log writable; path={path}")
     return CheckResult(
         "audit_log",
