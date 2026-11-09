@@ -100,3 +100,11 @@ Append-only log of scheduled-run changes.
 - Suite: 56 passed (baseline 55, python3.11; 3.12 not the default interpreter here).
 - Remaining F073 gap: per-service checks.
 - Decision: supersedes the hardcoded-5% decision; default unchanged, reversible.
+
+## 2026-11-09 — F073/F003 honour health.model_check_timeout_seconds
+- Gap: `health.model_check_timeout_seconds` (default 3s) was configured but never used; diagnostics blocked for the provider's 10s generation timeout when Ollama was down.
+- Fix: `ModelProvider.health_check(timeout_seconds=None)` (optional override; Echo/Ollama updated); `check_model_provider` / `run_diagnostics` pass the configured value. Providers whose `health_check(self)` lacks the parameter are still called the old way (compatibility).
+- Tests: `test_ollama_health_check_timeout_override`, `test_run_diagnostics_passes_configured_model_check_timeout` (both fail without the change, verified via stash).
+- Suite: 58 passed (baseline 56, python3.12 venv).
+- Remaining F073 gap: per-service checks beyond the model provider.
+- Decision: signature inspection used for backward compatibility instead of breaking the interface; reversible.

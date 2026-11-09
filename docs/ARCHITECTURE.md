@@ -95,6 +95,10 @@ odysseus/
 
 ## Recent fixes
 
+- `ModelProvider.health_check(timeout_seconds=None)` (F073/F003): diagnostics now
+  apply `health.model_check_timeout_seconds` (previously configured but unused);
+  providers without the parameter are still supported.
+
 - `MemoryStore.query` (F009) returns nothing for a blank query or a
   non-positive `limit` (previously a blank query matched every approved
   entry and a negative limit disabled the cap).

@@ -7,6 +7,7 @@ raising never prevents the others from running or from being reported.
 
 from __future__ import annotations
 
+import inspect
 import os
 import shutil
 import subprocess
@@ -248,8 +249,19 @@ def check_memory_store(store: MemoryStore) -> CheckResult:
     return CheckResult("memory_store", CheckStatus.OK, detail)
 
 
-def check_model_provider(provider: ModelProvider) -> CheckResult:
-    healthy, detail = provider.health_check()
+def check_model_provider(
+    provider: ModelProvider, timeout_seconds: float | None = None
+) -> CheckResult:
+    # Older/third-party providers may still define ``health_check(self)``
+    # without the timeout parameter; call them as before (compatibility).
+    try:
+        accepts_timeout = "timeout_seconds" in inspect.signature(provider.health_check).parameters
+    except (TypeError, ValueError):
+        accepts_timeout = False
+    if accepts_timeout and timeout_seconds is not None:
+        healthy, detail = provider.health_check(timeout_seconds)
+    else:
+        healthy, detail = provider.health_check()
     if healthy:
         return CheckResult(f"model_provider:{provider.name}", CheckStatus.OK, detail)
     # An unreachable *optional* local model is a WARNING, not CRITICAL --
@@ -288,6 +300,11 @@ def run_diagnostics(
         ),
         _safe_check("config", lambda: check_config(config)),
         _safe_check("memory_store", lambda: check_memory_store(memory_store)),
-        _safe_check("model_provider", lambda: check_model_provider(model_provider)),
+        _safe_check(
+            "model_provider",
+            lambda: check_model_provider(
+                model_provider, config.health.model_check_timeout_seconds
+            ),
+        ),
     ]
     return HealthReport(generated_at=datetime.now(timezone.utc), checks=checks)

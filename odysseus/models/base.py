@@ -55,8 +55,12 @@ class ModelProvider(ABC):
         """
 
     @abstractmethod
-    def health_check(self) -> tuple[bool, str]:
+    def health_check(self, timeout_seconds: float | None = None) -> tuple[bool, str]:
         """Return ``(is_healthy, detail)`` without raising.
+
+        ``timeout_seconds`` optionally overrides the provider's own request
+        timeout so diagnostics can use a short probe timeout
+        (``health.model_check_timeout_seconds``).
 
         Used by the health/diagnostics module (F073) and by the
         orchestrator to decide whether to attempt this provider at all.

@@ -41,5 +41,5 @@ class EchoProvider(ModelProvider):
             raw={"prompt_len": len(request.prompt)},
         )
 
-    def health_check(self) -> tuple[bool, str]:
+    def health_check(self, timeout_seconds: float | None = None) -> tuple[bool, str]:
         return True, "echo provider is always available (no external dependency)"

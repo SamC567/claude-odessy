@@ -138,3 +138,27 @@ def test_gpu_vram_threshold_is_configurable(tmp_path):
     assert check_gpu(gpus).status == CheckStatus.OK
     assert check_gpu(gpus, warn_free_percent=20.0).status == CheckStatus.WARNING
     assert HealthConfig(gpu_vram_warn_free_percent=20.0).gpu_vram_warn_free_percent == 20.0
+
+
+def test_run_diagnostics_passes_configured_model_check_timeout(tmp_path):
+    from odysseus.config import OdysseusConfig
+    from odysseus.health.diagnostics import check_model_provider
+
+    seen = []
+
+    class _Timed:
+        name = "timed"
+
+        def health_check(self, timeout_seconds=None):
+            seen.append(timeout_seconds)
+            return True, "ok"
+
+    class _Legacy:
+        name = "legacy"
+
+        def health_check(self):
+            return True, "ok"
+
+    check_model_provider(_Timed(), 2.5)
+    assert seen == [2.5]
+    assert check_model_provider(_Legacy(), 2.5).status.value == "ok"

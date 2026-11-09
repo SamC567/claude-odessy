@@ -135,3 +135,18 @@ def test_ollama_health_check_detects_missing_model():
     assert OllamaProvider(model_name="llama3", session=_FakeSession(get_result=ok)).health_check()[0]
     exact = _FakeResponse({"models": [{"name": "llama3:8b"}]})
     assert OllamaProvider(model_name="llama3:8b", session=_FakeSession(get_result=exact)).health_check()[0]
+
+
+def test_ollama_health_check_timeout_override():
+    seen = []
+
+    class _Spy(_FakeSession):
+        def get(self, url, timeout=None):
+            seen.append(timeout)
+            return super().get(url, timeout=timeout)
+
+    tags = _FakeResponse({"models": [{"name": "llama3:latest"}]})
+    provider = OllamaProvider(model_name="llama3", timeout_seconds=10.0, session=_Spy(get_result=tags))
+    provider.health_check()
+    provider.health_check(timeout_seconds=1.5)
+    assert seen == [10.0, 1.5]

@@ -86,9 +86,10 @@ class OllamaProvider(ModelProvider):
             f"Ollama request failed after {self.max_retries + 1} attempt(s): {last_error}"
         ) from last_error
 
-    def health_check(self) -> tuple[bool, str]:
+    def health_check(self, timeout_seconds: float | None = None) -> tuple[bool, str]:
+        timeout = self.timeout_seconds if timeout_seconds is None else timeout_seconds
         try:
-            resp = self._session.get(f"{self.base_url}/api/tags", timeout=self.timeout_seconds)
+            resp = self._session.get(f"{self.base_url}/api/tags", timeout=timeout)
             resp.raise_for_status()
         except requests.exceptions.RequestException as exc:
             return False, f"Ollama server unreachable at {self.base_url}: {exc}"
