@@ -95,6 +95,9 @@ odysseus/
 
 ## Recent fixes
 
+- `MemoryStore.query` (F009) matches case-insensitively for non-ASCII text too
+  (casefold on both sides; SQLite's LIKE only folded ASCII).
+
 - `check_config` (F073/F003) now WARNs when `provider=ollama` has a non-loopback
   `base_url` and `allow_external_providers` is false (the registry silently
   substitutes the echo fallback; previously the config check reported OK).

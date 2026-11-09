@@ -137,3 +137,10 @@ Append-only log of scheduled-run changes.
 - Test: `test_config_check_warns_when_external_ollama_is_blocked` (fails without the change, verified via stash).
 - Suite: 62 passed (baseline 61, python3.12 venv).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
+
+## 2026-11-09 — F009 Unicode case-insensitive retrieval
+- Gap: `MemoryStore.query` used SQLite LIKE, which only folds ASCII, so "ärger" did not match "Ärger" (the duplicate check already used casefold).
+- Fix: register a `fold` SQL function (`str.casefold`) and compare casefolded content/patterns.
+- Test: `test_query_is_case_insensitive_for_non_ascii` (fails without the change, verified via stash).
+- Suite: 63 passed (baseline 62, python3.11 venv).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.

@@ -176,3 +176,12 @@ def test_review_does_not_overwrite_concurrent_decision(memory_store: MemoryStore
     final = memory_store.get(stored.id)
     assert final.status == MemoryStatus.APPROVED
     assert final.reviewer == "alice"
+
+
+def test_query_is_case_insensitive_for_non_ascii(memory_store: MemoryStore):
+    stored = memory_store.submit_candidate(
+        MemoryEntry(content="Der Ärger über Straße", source="user", confidence=0.9)
+    )
+    memory_store.approve(stored.id, reviewer="me")
+    assert [m.id for m in memory_store.query("ärger")] == [stored.id]
+    assert [m.id for m in memory_store.query("STRASSE")] == [stored.id]

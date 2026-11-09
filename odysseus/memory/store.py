@@ -205,11 +205,15 @@ class MemoryStore:
             return []
         words = [w for w in text.split() if len(w) >= 3]
         patterns = {text} | set(words)
-        clauses = " OR ".join(["content LIKE ? ESCAPE '\\'"] * len(patterns))
+        # Unicode-aware case-insensitive match: SQLite's built-in LIKE only
+        # folds ASCII, so fold both sides with str.casefold() (same rule the
+        # duplicate check uses).
+        clauses = " OR ".join(["fold(content) LIKE ? ESCAPE '\\'"] * len(patterns))
         params: list[object] = [MemoryStatus.APPROVED.value]
-        params.extend(f"%{_escape_like(p)}%" for p in patterns)
+        params.extend(f"%{_escape_like(p.casefold())}%" for p in patterns)
         params.append(limit)
         with closing(self._connect()) as conn:
+            conn.create_function("fold", 1, lambda v: v.casefold() if v else v, deterministic=True)
             rows = conn.execute(
                 f"SELECT * FROM memory_entries "
                 f"WHERE status = ? AND ({clauses}) "
