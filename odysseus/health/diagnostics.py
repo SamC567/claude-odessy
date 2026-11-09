@@ -21,6 +21,7 @@ from pathlib import Path
 from odysseus.config import OdysseusConfig
 from odysseus.memory.store import MemoryStore
 from odysseus.models.base import ModelProvider
+from odysseus.models.registry import is_loopback_url
 
 
 class CheckStatus(str, Enum):
@@ -234,6 +235,19 @@ def check_config(config: OdysseusConfig) -> CheckResult:
             "config",
             CheckStatus.WARNING,
             f"model.provider={config.model.provider!r} is not a recognised local provider",
+        )
+    if (
+        config.model.provider == "ollama"
+        and not config.identity.allow_external_providers
+        and not is_loopback_url(config.model.base_url)
+    ):
+        # build_provider() silently substitutes the echo fallback here; make
+        # the (safe) override visible instead of reporting a clean config.
+        return CheckResult(
+            "config",
+            CheckStatus.WARNING,
+            f"model.base_url={config.model.base_url!r} is not loopback and "
+            "identity.allow_external_providers is false: the echo fallback will be used",
         )
     return CheckResult("config", CheckStatus.OK, "configuration loaded and valid")
 

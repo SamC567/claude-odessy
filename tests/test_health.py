@@ -194,3 +194,19 @@ def test_disk_check_defaults_to_memory_db_volume(tmp_path, monkeypatch):
     memory = MemoryStore(tmp_path / "mem.sqlite3")
     run_diagnostics(OdysseusConfig(), memory, EchoProvider())
     assert seen == [tmp_path]
+
+
+def test_config_check_warns_when_external_ollama_is_blocked():
+    from odysseus.health.diagnostics import check_config
+
+    blocked = OdysseusConfig(
+        model={"provider": "ollama", "base_url": "http://192.0.2.10:11434"}
+    )
+    assert check_config(blocked).status == CheckStatus.WARNING
+    local = OdysseusConfig(model={"provider": "ollama"})
+    assert check_config(local).status == CheckStatus.OK
+    allowed = OdysseusConfig(
+        model={"provider": "ollama", "base_url": "http://192.0.2.10:11434"},
+        identity={"allow_external_providers": True},
+    )
+    assert check_config(allowed).status == CheckStatus.OK

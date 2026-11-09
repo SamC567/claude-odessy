@@ -95,6 +95,10 @@ odysseus/
 
 ## Recent fixes
 
+- `check_config` (F073/F003) now WARNs when `provider=ollama` has a non-loopback
+  `base_url` and `allow_external_providers` is false (the registry silently
+  substitutes the echo fallback; previously the config check reported OK).
+
 - `ModelProvider.health_check(timeout_seconds=None)` (F073/F003): diagnostics now
   apply `health.model_check_timeout_seconds` (previously configured but unused);
   providers without the parameter are still supported.

@@ -130,3 +130,10 @@ Append-only log of scheduled-run changes.
 - Test: `test_review_does_not_overwrite_concurrent_decision` (fails without the change, verified via stash).
 - Suite: 61 passed (baseline 60, python3.12 venv).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
+
+## 2026-11-09 — F073/F003 config check surfaces blocked external Ollama
+- Gap: a non-loopback `model.base_url` with external providers disallowed was silently swapped for the echo fallback; the `config` health check still said OK.
+- Fix: `check_config` returns WARNING in that case (reuses `is_loopback_url`).
+- Test: `test_config_check_warns_when_external_ollama_is_blocked` (fails without the change, verified via stash).
+- Suite: 62 passed (baseline 61, python3.12 venv).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.
