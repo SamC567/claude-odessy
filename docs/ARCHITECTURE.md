@@ -148,3 +148,7 @@ odysseus/
   when no `disk_path` is given (previously the process working directory, which
   may be a different volume from the data). Falls back to `.` if that directory
   does not exist yet.
+- `MemoryStore._review` (F009) now guards the status transition inside the
+  `UPDATE` itself (`WHERE id = ? AND status = ?`), so two reviewers racing on one
+  entry can no longer overwrite each other's decision; the loser gets a
+  `ReviewInboxError`.

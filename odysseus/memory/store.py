@@ -255,14 +255,20 @@ class MemoryStore:
         now = datetime.now(timezone.utc)
         with closing(self._connect()) as conn:
             try:
-                conn.execute(
+                # Status guard in the UPDATE itself: a concurrent reviewer who
+                # changed the entry since the check above must not be overwritten.
+                cur = conn.execute(
                     "UPDATE memory_entries SET status = ?, reviewed_at = ?, reviewer = ? "
-                    "WHERE id = ?",
-                    (status.value, now.isoformat(), reviewer, entry_id),
+                    "WHERE id = ? AND status = ?",
+                    (status.value, now.isoformat(), reviewer, entry_id, expected.value),
                 )
                 conn.commit()
             except sqlite3.Error as exc:
                 raise MemoryError_(f"Could not update memory entry {entry_id}: {exc}") from exc
+        if cur.rowcount != 1:
+            raise ReviewInboxError(
+                f"Entry {entry_id} changed status concurrently; review not applied"
+            )
         audit(
             "memory.review",
             id=entry_id,

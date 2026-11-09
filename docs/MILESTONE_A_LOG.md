@@ -123,3 +123,10 @@ Append-only log of scheduled-run changes.
 - Suite: 60 passed (baseline 59, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
 - Decision: only the memory DB volume is checked by default (single path); multi-volume checks parked.
+
+## 2026-11-09 — F009 atomic review transitions
+- Gap: `_review` checked status then updated unconditionally (check-then-act race); a concurrent reviewer's decision could be overwritten.
+- Fix: `UPDATE ... WHERE id = ? AND status = ?` plus rowcount check -> `ReviewInboxError` on loss.
+- Test: `test_review_does_not_overwrite_concurrent_decision` (fails without the change, verified via stash).
+- Suite: 61 passed (baseline 60, python3.12 venv).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.

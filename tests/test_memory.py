@@ -161,3 +161,18 @@ def test_duplicate_candidate_is_not_stored_twice(memory_store: MemoryStore):
         MemoryEntry(content="Prefers tea", source="user", confidence=0.9)
     )
     assert redo.id != first.id
+
+
+def test_review_does_not_overwrite_concurrent_decision(memory_store: MemoryStore, monkeypatch):
+    stored = memory_store.submit_candidate(
+        MemoryEntry(content="Race fact", source="user", confidence=0.5)
+    )
+    stale = memory_store.get(stored.id)  # still PENDING
+    memory_store.approve(stored.id, "alice")  # another reviewer wins the race
+    monkeypatch.setattr(memory_store, "get", lambda _id: stale)
+    with pytest.raises(ReviewInboxError):
+        memory_store.reject(stored.id, "bob")
+    monkeypatch.undo()
+    final = memory_store.get(stored.id)
+    assert final.status == MemoryStatus.APPROVED
+    assert final.reviewer == "alice"
