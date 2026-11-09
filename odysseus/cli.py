@@ -87,12 +87,18 @@ def cmd_memory_list_approved(args: argparse.Namespace) -> int:
 
 def cmd_memory_remember(args: argparse.Namespace) -> int:
     orchestrator, _ = _build_orchestrator(args.config)
-    entry = orchestrator.remember(
-        content=args.content,
-        source=args.source,
-        confidence=args.confidence,
-        tags=tuple(args.tags or ()),
-    )
+    try:
+        entry = orchestrator.remember(
+            content=args.content,
+            source=args.source,
+            confidence=args.confidence,
+            tags=tuple(args.tags or ()),
+        )
+    except ValueError as exc:
+        # Invalid user input (empty content/source, confidence outside 0..1):
+        # report cleanly instead of a traceback.
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     print(f"Submitted as entry [{entry.id}] with status={entry.status.value}")
     return 0
 

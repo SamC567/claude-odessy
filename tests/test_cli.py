@@ -74,3 +74,11 @@ def test_cli_config_show(tmp_path, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert '"provider": "echo"' in out
+
+
+def test_cli_memory_remember_rejects_invalid_input_cleanly(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    rc = main(["--config", str(config_path), "memory", "remember", "x",
+               "--source", "user", "--confidence", "2"])
+    assert rc == 2
+    assert "confidence" in capsys.readouterr().err

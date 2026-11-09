@@ -211,3 +211,10 @@ Append-only log of scheduled-run changes.
 - Suite: 70 passed (baseline 69, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
 - Decision: WARNING not CRITICAL, only major version checked (no full specifier parsing, stdlib only); reversible.
+
+## 2026-11-09 — F009 CLI `memory remember` rejects invalid input cleanly
+- Gap: `memory remember --confidence 2` (or empty content/source) escaped as a raw `ValueError` traceback.
+- Fix: `cmd_memory_remember` catches `ValueError`, prints `error: ...` to stderr, returns exit code 2.
+- Test: `test_cli_memory_remember_rejects_invalid_input_cleanly` (fails without the change, verified via stash).
+- Suite: 71 passed (baseline 70, python3.12).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.
