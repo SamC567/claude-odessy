@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
@@ -43,6 +44,16 @@ class ModelProviderConfig(BaseModel):
     model_name: str = Field(default="llama3", description="Model identifier to request.")
     timeout_seconds: float = Field(default=10.0, gt=0)
     max_retries: int = Field(default=1, ge=0)
+
+    @field_validator("base_url")
+    @classmethod
+    def _base_url_is_http(cls, value: str) -> str:
+        # A malformed endpoint (no scheme, ftp://, empty host) would otherwise
+        # only fail at request time, deep inside the provider.
+        parsed = urlparse(value.strip())
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise ValueError("model.base_url must be an http(s) URL with a host")
+        return value.strip()
 
 
 class MemoryConfig(BaseModel):

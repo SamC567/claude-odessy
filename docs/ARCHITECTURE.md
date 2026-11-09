@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- `model.base_url` (F003/F001) must be an http(s) URL with a host; malformed values (no scheme, ftp://, empty) are a `ConfigError` at load time and surrounding whitespace is trimmed.
+
 - `log_level` config (F001) is validated at load time (DEBUG/INFO/WARNING/ERROR/CRITICAL, case-insensitive, normalised to upper case); an unknown value is a `ConfigError` instead of a raw `ValueError` traceback from the CLI.
 
 - `MemoryStore` review decisions (F009) record the reviewer name trimmed of surrounding whitespace.

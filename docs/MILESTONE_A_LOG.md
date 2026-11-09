@@ -240,3 +240,11 @@ Append-only log of scheduled-run changes.
 - Suite: 74 passed (baseline 73, python3.12 venv).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
 - Decision: numeric/custom logging levels are not accepted (stdlib names only); reversible.
+
+## 2026-11-09 — F003/F001 config rejects malformed model.base_url
+- Gap: `model.base_url` accepted any string (`localhost:11434`, `ftp://x`, empty), failing only at request time inside the provider.
+- Fix: `ModelProviderConfig.base_url` validator requires http(s) scheme and a host; value is trimmed.
+- Test: `test_malformed_model_base_url_is_rejected` (fails without the change, verified via stash).
+- Suite: 78 passed (baseline 74, python3.11).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.
+- Decision: only http/https accepted (Ollama is HTTP); reversible.

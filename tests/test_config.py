@@ -81,3 +81,14 @@ def test_unknown_log_level_is_rejected_and_known_is_normalised(tmp_path):
     good = tmp_path / "ok.yaml"
     good.write_text("log_level: debug\n")
     assert load_config(good).log_level == "DEBUG"
+
+
+@pytest.mark.parametrize("url", ["localhost:11434", "ftp://localhost", "http://", ""])
+def test_malformed_model_base_url_is_rejected(tmp_path, url):
+    bad = tmp_path / "url.yaml"
+    bad.write_text(f"model:\n  base_url: '{url}'\n")
+    with pytest.raises(ConfigError):
+        load_config(bad)
+    good = tmp_path / "ok.yaml"
+    good.write_text("model:\n  base_url: ' http://127.0.0.1:11434 '\n")
+    assert load_config(good).model.base_url == "http://127.0.0.1:11434"
