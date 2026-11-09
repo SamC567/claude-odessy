@@ -50,7 +50,8 @@ def cmd_chat(args: argparse.Namespace) -> int:
 
 def cmd_health(args: argparse.Namespace) -> int:
     orchestrator, config = _build_orchestrator(args.config)
-    report = run_diagnostics(config, orchestrator.memory, orchestrator.provider, Path("."))
+    report = run_diagnostics(config, orchestrator.memory, orchestrator.provider, Path("."),
+                             audit_log_path=Path("data/audit.log"))
     if args.json:
         print(json.dumps(report.as_dict(), indent=2))
     else:

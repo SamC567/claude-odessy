@@ -257,3 +257,23 @@ def test_dependencies_check_warns_on_unsupported_major_version(monkeypatch):
     res = diagnostics.check_dependencies(("pydantic", "pytest"))
     assert res.status == CheckStatus.WARNING
     assert "pydantic==1.10.0" in res.detail
+
+
+def test_audit_log_check_warns_when_not_writable_and_ok_otherwise(tmp_path, monkeypatch):
+    import os
+
+    store = MemoryStore(tmp_path / "mem.sqlite3")
+    log = tmp_path / "logs" / "audit.log"  # dir doesn't exist yet -> parent checked
+    report = run_diagnostics(OdysseusConfig(), store, EchoProvider(), tmp_path, audit_log_path=log)
+    assert next(c for c in report.checks if c.name == "audit_log").status == CheckStatus.OK
+
+    real_access = os.access
+    monkeypatch.setattr(
+        os, "access",
+        lambda p, mode, *a, **k: False if Path(p) == tmp_path and mode == os.W_OK
+        else real_access(p, mode, *a, **k),
+    )
+    report = run_diagnostics(OdysseusConfig(), store, EchoProvider(), tmp_path, audit_log_path=log)
+    check = next(c for c in report.checks if c.name == "audit_log")
+    assert check.status == CheckStatus.WARNING
+    assert "not writable" in check.detail

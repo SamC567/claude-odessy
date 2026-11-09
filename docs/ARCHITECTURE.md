@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- `check_audit_log` (F073/F001): `run_diagnostics(..., audit_log_path=)` adds an `audit_log` check that WARNs when the audit log (or its nearest existing parent directory) is not writable; the `health` CLI passes `data/audit.log`. Windows ACL behaviour untested here.
+
 - `model.base_url` (F003/F001) must be an http(s) URL with a host; malformed values (no scheme, ftp://, empty) are a `ConfigError` at load time and surrounding whitespace is trimmed.
 
 - `log_level` config (F001) is validated at load time (DEBUG/INFO/WARNING/ERROR/CRITICAL, case-insensitive, normalised to upper case); an unknown value is a `ConfigError` instead of a raw `ValueError` traceback from the CLI.

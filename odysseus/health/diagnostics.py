@@ -293,6 +293,22 @@ def check_memory_store(store: MemoryStore, pending_warn_count: int = 100) -> Che
     return CheckResult("memory_store", CheckStatus.OK, detail)
 
 
+def check_audit_log(path: Path) -> CheckResult:
+    """The audit trail must be writable; otherwise autonomous actions go unrecorded."""
+    path = Path(path)
+    target = path if path.exists() else path.parent
+    # Walk up to the nearest existing ancestor (the log dir is created lazily).
+    while not target.exists() and target != target.parent:
+        target = target.parent
+    if os.access(target, os.W_OK):
+        return CheckResult("audit_log", CheckStatus.OK, f"audit log writable; path={path}")
+    return CheckResult(
+        "audit_log",
+        CheckStatus.WARNING,
+        f"audit log is not writable (autonomous actions would go unrecorded); path={path}",
+    )
+
+
 def check_model_provider(
     provider: ModelProvider, timeout_seconds: float | None = None
 ) -> CheckResult:
@@ -318,6 +334,7 @@ def run_diagnostics(
     memory_store: MemoryStore,
     model_provider: ModelProvider,
     disk_path: Path | None = None,
+    audit_log_path: Path | None = None,
 ) -> HealthReport:
     """Run the full diagnostic suite and return a structured report."""
     # Default to the volume holding the memory DB (the data that matters),
@@ -360,4 +377,6 @@ def run_diagnostics(
             ),
         ),
     ]
+    if audit_log_path is not None:
+        checks.append(_safe_check("audit_log", lambda: check_audit_log(audit_log_path)))
     return HealthReport(generated_at=datetime.now(timezone.utc), checks=checks)

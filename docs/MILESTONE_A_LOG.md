@@ -248,3 +248,11 @@ Append-only log of scheduled-run changes.
 - Suite: 78 passed (baseline 74, python3.11).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
 - Decision: only http/https accepted (Ollama is HTTP); reversible.
+
+## 2026-11-09 — F073 audit log writability check
+- Gap: the audit trail (a governing principle) was never diagnosed; an unwritable log dir would silently drop audit records while `health` reported OK.
+- Fix: `check_audit_log` + optional `audit_log_path` arg on `run_diagnostics`; CLI `health` passes `data/audit.log`. Missing log dir -> nearest existing parent is checked.
+- Test: `test_audit_log_check_warns_when_not_writable_and_ok_otherwise` (fails without the change, verified via stash).
+- Suite: 79 passed (baseline 78, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: WARNING not CRITICAL (the assistant still answers); optional arg keeps existing callers compatible; reversible.
