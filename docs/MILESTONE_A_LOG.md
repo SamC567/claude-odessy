@@ -218,3 +218,10 @@ Append-only log of scheduled-run changes.
 - Test: `test_cli_memory_remember_rejects_invalid_input_cleanly` (fails without the change, verified via stash).
 - Suite: 71 passed (baseline 70, python3.12).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
+
+## 2026-11-09 — F009 review decisions require a named reviewer
+- Gap: `approve`/`reject`/`retract` accepted a blank reviewer, so the review audit trail could record no accountable reviewer.
+- Fix: `MemoryStore._review` raises `ReviewInboxError` for an empty/whitespace reviewer before touching the entry.
+- Test: `test_review_requires_non_blank_reviewer` (fails without the change, verified via stash).
+- Suite: 72 passed (baseline 71, python3.12).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.

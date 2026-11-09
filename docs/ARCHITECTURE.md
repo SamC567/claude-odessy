@@ -190,3 +190,5 @@ odysseus/
   `MemoryError_`: it answers with no memory context, sets `degraded=True` with a
   "memory unavailable" reason, and audits `orchestrator.memory_failed`
   (previously the error crashed the interaction).
+
+- `MemoryStore.approve/reject/retract` (F009) reject a blank reviewer with `ReviewInboxError`, so every review decision is attributable.

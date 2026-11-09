@@ -206,3 +206,15 @@ def test_corrupt_row_raises_typed_memory_error(tmp_path):
         conn.execute("UPDATE memory_entries SET tags = 'not json' WHERE id = ?", (e.id,))
     with pytest.raises(MemoryError_):
         store.query("tea")
+
+
+def test_review_requires_non_blank_reviewer(memory_store: MemoryStore):
+    stored = memory_store.submit_candidate(
+        MemoryEntry(content="Needs a named reviewer", source="user", confidence=0.5)
+    )
+    for blank in ("", "   "):
+        with pytest.raises(ReviewInboxError):
+            memory_store.approve(stored.id, reviewer=blank)
+        with pytest.raises(ReviewInboxError):
+            memory_store.reject(stored.id, reviewer=blank)
+    assert memory_store.get(stored.id).status == MemoryStatus.PENDING
