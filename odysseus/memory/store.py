@@ -38,6 +38,9 @@ CREATE INDEX IF NOT EXISTS idx_memory_status ON memory_entries(status);
 """
 
 
+_PUNCT = ".,;:!?\"'()[]{}<>"
+
+
 def _escape_like(term: str) -> str:
     """Escape SQL LIKE wildcards so user text is matched literally."""
     return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -203,7 +206,8 @@ class MemoryStore:
             # A blank query would otherwise match every approved entry, and a
             # negative LIMIT means "no limit" in SQLite.
             return []
-        words = [w for w in text.split() if len(w) >= 3]
+        # Strip surrounding punctuation so "pizza?" matches "pizza".
+        words = [w for w in (t.strip(_PUNCT) for t in text.split()) if len(w) >= 3]
         patterns = {text} | set(words)
         # Unicode-aware case-insensitive match: SQLite's built-in LIKE only
         # folds ASCII, so fold both sides with str.casefold() (same rule the

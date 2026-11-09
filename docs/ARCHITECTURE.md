@@ -95,6 +95,9 @@ odysseus/
 
 ## Recent fixes
 
+- `MemoryStore.query` (F009) strips surrounding punctuation from query words, so
+  "pizza?" matches "pizza" (previously the trailing `?` defeated the match).
+
 - `health.pending_review_warn_count` (F073/F009, default 100) makes the memory-store
   pending-review WARNING threshold configurable (was hardcoded).
 

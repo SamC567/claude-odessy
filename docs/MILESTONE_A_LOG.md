@@ -151,3 +151,10 @@ Append-only log of scheduled-run changes.
 - Test: `test_pending_review_warn_threshold_is_configurable` (fails without the change, verified via stash).
 - Suite: 64 passed (baseline 63, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
+
+## 2026-11-09 — F009 retrieval ignores punctuation around query words
+- Gap: `MemoryStore.query` split on whitespace only, so a query word like `pizza?` never matched stored `pizza`.
+- Fix: strip surrounding punctuation from query words before matching.
+- Test: `test_query_ignores_punctuation_around_words` (fails without the change, verified via stash).
+- Suite: 65 passed (baseline 64, python3.11).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.

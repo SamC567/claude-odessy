@@ -185,3 +185,10 @@ def test_query_is_case_insensitive_for_non_ascii(memory_store: MemoryStore):
     memory_store.approve(stored.id, reviewer="me")
     assert [m.id for m in memory_store.query("ärger")] == [stored.id]
     assert [m.id for m in memory_store.query("STRASSE")] == [stored.id]
+
+
+def test_query_ignores_punctuation_around_words(tmp_path):
+    store = MemoryStore(tmp_path / "m.db")
+    e = store.submit_candidate(MemoryEntry(content="Sam likes pizza", source="user", confidence=0.9))
+    store.approve(e.id, reviewer="t")
+    assert [m.id for m in store.query("pizza?")] == [e.id]
