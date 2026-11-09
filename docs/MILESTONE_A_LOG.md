@@ -256,3 +256,11 @@ Append-only log of scheduled-run changes.
 - Suite: 79 passed (baseline 78, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: WARNING not CRITICAL (the assistant still answers); optional arg keeps existing callers compatible; reversible.
+
+## 2026-11-09 — F009 MemoryEntry validates tags
+- Gap: `tags="food"` was silently stored as `["f","o","o","d"]`; blank/non-string tags were accepted.
+- Fix: `MemoryEntry.__post_init__` rejects a bare string and blank/non-string items; lists are normalised to tuples.
+- Test: `test_memory_entry_rejects_bad_tags` (fails without the change, verified via stash).
+- Suite: 80 passed (baseline 79, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: strict rejection (ValueError, same as other fields) rather than coercion; reversible.

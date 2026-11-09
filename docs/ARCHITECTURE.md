@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- `MemoryEntry` (F009) rejects tags given as a bare string (previously split into single characters) or containing blank/non-string items, and normalises a tag list to a tuple.
+
 - `check_audit_log` (F073/F001): `run_diagnostics(..., audit_log_path=)` adds an `audit_log` check that WARNs when the audit log (or its nearest existing parent directory) is not writable; the `health` CLI passes `data/audit.log`. Windows ACL behaviour untested here.
 
 - `model.base_url` (F003/F001) must be an http(s) URL with a host; malformed values (no scheme, ftp://, empty) are a `ConfigError` at load time and surrounding whitespace is trimmed.

@@ -48,3 +48,9 @@ class MemoryEntry:
             raise ValueError("MemoryEntry.source must not be empty")
         if not (0.0 <= self.confidence <= 1.0):
             raise ValueError("MemoryEntry.confidence must be between 0.0 and 1.0")
+        if isinstance(self.tags, str):
+            # A bare string would be silently split into single-character tags.
+            raise ValueError("MemoryEntry.tags must be a collection of strings, not a string")
+        if not all(isinstance(t, str) and t.strip() for t in self.tags):
+            raise ValueError("MemoryEntry.tags must contain only non-empty strings")
+        self.tags = tuple(self.tags)

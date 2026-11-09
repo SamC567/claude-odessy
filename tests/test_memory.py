@@ -226,3 +226,14 @@ def test_review_records_trimmed_reviewer(memory_store: MemoryStore):
     )
     approved = memory_store.approve(stored.id, reviewer="  sam \n")
     assert approved.reviewer == "sam"
+
+
+def test_memory_entry_rejects_bad_tags():
+    with pytest.raises(ValueError):
+        MemoryEntry(content="x", source="s", confidence=0.5, tags="food")
+    with pytest.raises(ValueError):
+        MemoryEntry(content="x", source="s", confidence=0.5, tags=("ok", " "))
+    with pytest.raises(ValueError):
+        MemoryEntry(content="x", source="s", confidence=0.5, tags=("ok", 3))
+    entry = MemoryEntry(content="x", source="s", confidence=0.5, tags=["a", "b"])
+    assert entry.tags == ("a", "b")
