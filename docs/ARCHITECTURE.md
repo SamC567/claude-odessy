@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- `MemoryStore` review decisions (F009) record the reviewer name trimmed of surrounding whitespace.
+
 - `memory remember` CLI (F009) reports invalid input (confidence outside 0..1, empty content/source) as `error: ...` with exit code 2 instead of a traceback.
 
 - `check_dependencies` (F073) warns when an installed dependency's major version is outside the supported range (pydantic 2, PyYAML 6, requests 2, mirroring requirements.txt); previously any installed version reported OK.

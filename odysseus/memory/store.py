@@ -259,6 +259,7 @@ class MemoryStore:
     ) -> MemoryEntry:
         if not reviewer or not reviewer.strip():
             raise ReviewInboxError("A non-empty reviewer is required for review decisions")
+        reviewer = reviewer.strip()  # keep the recorded identity free of stray whitespace
         existing = self.get(entry_id)
         if existing is None:
             raise ReviewInboxError(f"No memory entry with id={entry_id}")

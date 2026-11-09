@@ -225,3 +225,10 @@ Append-only log of scheduled-run changes.
 - Test: `test_review_requires_non_blank_reviewer` (fails without the change, verified via stash).
 - Suite: 72 passed (baseline 71, python3.12).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
+
+## 2026-11-09 — F009 reviewer name is stored trimmed
+- Gap: `approve`/`reject`/`retract` stored the reviewer verbatim, so "  sam " and "sam" were different identities in the audit trail.
+- Fix: `MemoryStore._review` strips the reviewer after the blank check.
+- Test: `test_review_records_trimmed_reviewer` (fails without the change, verified via stash).
+- Suite: 73 passed (baseline 72, python3.11).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.

@@ -218,3 +218,11 @@ def test_review_requires_non_blank_reviewer(memory_store: MemoryStore):
         with pytest.raises(ReviewInboxError):
             memory_store.reject(stored.id, reviewer=blank)
     assert memory_store.get(stored.id).status == MemoryStatus.PENDING
+
+
+def test_review_records_trimmed_reviewer(memory_store: MemoryStore):
+    stored = memory_store.submit_candidate(
+        MemoryEntry(content="Reviewer name is trimmed", source="user", confidence=0.5)
+    )
+    approved = memory_store.approve(stored.id, reviewer="  sam \n")
+    assert approved.reviewer == "sam"
