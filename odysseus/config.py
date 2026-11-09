@@ -70,6 +70,7 @@ class HealthConfig(BaseModel):
     ram_warn_available_percent: float = Field(default=15.0, ge=0, le=100)
     ram_critical_available_percent: float = Field(default=5.0, ge=0, le=100)
     gpu_vram_warn_free_percent: float = Field(default=5.0, ge=0, le=100)
+    pending_review_warn_count: int = Field(default=100, ge=1)
 
     @model_validator(mode="after")
     def _thresholds_are_ordered(self) -> "HealthConfig":

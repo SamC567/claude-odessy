@@ -26,5 +26,6 @@ health:
   ram_warn_available_percent: 15.0      # warn when available RAM <= this %
   ram_critical_available_percent: 5.0   # critical when available RAM <= this %
   gpu_vram_warn_free_percent: 5.0       # warn when free VRAM <= this % (NVIDIA only)
+  pending_review_warn_count: 100        # warn when more memory entries than this await review
 
 log_level: INFO

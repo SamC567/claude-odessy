@@ -144,3 +144,10 @@ Append-only log of scheduled-run changes.
 - Test: `test_query_is_case_insensitive_for_non_ascii` (fails without the change, verified via stash).
 - Suite: 63 passed (baseline 62, python3.11 venv).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
+
+## 2026-11-09 — F073 configurable pending-review warn threshold
+- Gap: memory_store check warned at a hardcoded >100 pending review items.
+- Fix: `health.pending_review_warn_count` (default 100) in `HealthConfig` + `config/default.yaml`; `check_memory_store(store, pending_warn_count)` wired in `run_diagnostics`.
+- Test: `test_pending_review_warn_threshold_is_configurable` (fails without the change, verified via stash).
+- Suite: 64 passed (baseline 63, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.

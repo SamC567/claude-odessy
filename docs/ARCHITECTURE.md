@@ -95,6 +95,9 @@ odysseus/
 
 ## Recent fixes
 
+- `health.pending_review_warn_count` (F073/F009, default 100) makes the memory-store
+  pending-review WARNING threshold configurable (was hardcoded).
+
 - `MemoryStore.query` (F009) matches case-insensitively for non-ASCII text too
   (casefold on both sides; SQLite's LIKE only folded ASCII).
 

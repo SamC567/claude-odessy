@@ -210,3 +210,18 @@ def test_config_check_warns_when_external_ollama_is_blocked():
         identity={"allow_external_providers": True},
     )
     assert check_config(allowed).status == CheckStatus.OK
+
+
+def test_pending_review_warn_threshold_is_configurable(tmp_path):
+    from odysseus.config import HealthConfig
+    from odysseus.memory.models import MemoryEntry
+
+    store = MemoryStore(tmp_path / "mem.sqlite3")
+    for i in range(3):
+        store.submit_candidate(MemoryEntry(content=f"fact {i}", source="user", confidence=0.5))
+    config = OdysseusConfig(health=HealthConfig(pending_review_warn_count=2))
+    report = run_diagnostics(config, store, EchoProvider(), disk_path=tmp_path)
+    check = next(c for c in report.checks if c.name == "memory_store")
+    assert check.status == CheckStatus.WARNING
+    default = run_diagnostics(OdysseusConfig(), store, EchoProvider(), disk_path=tmp_path)
+    assert next(c for c in default.checks if c.name == "memory_store").status == CheckStatus.OK

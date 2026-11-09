@@ -252,7 +252,7 @@ def check_config(config: OdysseusConfig) -> CheckResult:
     return CheckResult("config", CheckStatus.OK, "configuration loaded and valid")
 
 
-def check_memory_store(store: MemoryStore) -> CheckResult:
+def check_memory_store(store: MemoryStore, pending_warn_count: int = 100) -> CheckResult:
     ok, problem = store.integrity_check()
     if not ok:
         return CheckResult(
@@ -263,7 +263,7 @@ def check_memory_store(store: MemoryStore) -> CheckResult:
     counts = store.count_by_status()
     pending = counts.get("pending", 0)
     detail = f"db={store.db_path} counts={counts}"
-    if pending > 100:
+    if pending > pending_warn_count:
         return CheckResult(
             "memory_store", CheckStatus.WARNING, f"{pending} pending review items; {detail}"
         )
@@ -326,7 +326,10 @@ def run_diagnostics(
             lambda: check_gpu(warn_free_percent=config.health.gpu_vram_warn_free_percent),
         ),
         _safe_check("config", lambda: check_config(config)),
-        _safe_check("memory_store", lambda: check_memory_store(memory_store)),
+        _safe_check("memory_store", lambda: check_memory_store(
+                memory_store, config.health.pending_review_warn_count
+            ),
+        ),
         _safe_check(
             "model_provider",
             lambda: check_model_provider(
