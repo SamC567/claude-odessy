@@ -192,3 +192,17 @@ def test_query_ignores_punctuation_around_words(tmp_path):
     e = store.submit_candidate(MemoryEntry(content="Sam likes pizza", source="user", confidence=0.9))
     store.approve(e.id, reviewer="t")
     assert [m.id for m in store.query("pizza?")] == [e.id]
+
+
+def test_corrupt_row_raises_typed_memory_error(tmp_path):
+    import sqlite3
+
+    from odysseus.exceptions import MemoryError_
+
+    store = MemoryStore(tmp_path / "m.db")
+    e = store.submit_candidate(MemoryEntry(content="likes tea", source="user", confidence=0.9))
+    store.approve(e.id, reviewer="me")
+    with sqlite3.connect(store.db_path) as conn:
+        conn.execute("UPDATE memory_entries SET tags = 'not json' WHERE id = ?", (e.id,))
+    with pytest.raises(MemoryError_):
+        store.query("tea")

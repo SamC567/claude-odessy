@@ -180,3 +180,10 @@ Append-only log of scheduled-run changes.
 - Suite: 67 passed (baseline 66, python3.11).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
 - Decision: only `MemoryError_` is caught (not arbitrary exceptions), so programming errors still surface; reversible.
+
+## 2026-11-09 — F009 corrupt memory row raises typed error
+- Gap: a corrupt row (bad tags JSON/status/timestamp) raised a raw `ValueError` from `_row_to_entry`, bypassing the orchestrator's `MemoryError_` degradation.
+- Fix: `_row_to_entry` wraps decoding errors in `MemoryError_`.
+- Test: `test_corrupt_row_raises_typed_memory_error` (fails without the change, verified via stash).
+- Suite: 68 passed (baseline 67, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.

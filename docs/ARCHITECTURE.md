@@ -95,6 +95,10 @@ odysseus/
 
 ## Recent fixes
 
+- `MemoryStore` row decoding (F009) raises `MemoryError_` for a corrupt row (bad tags JSON,
+  unknown status, bad timestamp) instead of a raw `ValueError`, so the orchestrator's
+  memory-failure degradation covers it.
+
 - `OllamaProvider.generate` (F003) raises `ModelProviderError` when the server returns a
   non-object JSON body (previously an `AttributeError` escaped, bypassing the orchestrator's
   echo fallback). Tested against a simulated server only.

@@ -47,17 +47,22 @@ def _escape_like(term: str) -> str:
 
 
 def _row_to_entry(row: sqlite3.Row) -> MemoryEntry:
-    return MemoryEntry(
-        id=row["id"],
-        content=row["content"],
-        source=row["source"],
-        confidence=row["confidence"],
-        status=MemoryStatus(row["status"]),
-        tags=tuple(json.loads(row["tags"])),
-        created_at=datetime.fromisoformat(row["created_at"]),
-        reviewed_at=datetime.fromisoformat(row["reviewed_at"]) if row["reviewed_at"] else None,
-        reviewer=row["reviewer"],
-    )
+    try:
+        return MemoryEntry(
+            id=row["id"],
+            content=row["content"],
+            source=row["source"],
+            confidence=row["confidence"],
+            status=MemoryStatus(row["status"]),
+            tags=tuple(json.loads(row["tags"])),
+            created_at=datetime.fromisoformat(row["created_at"]),
+            reviewed_at=datetime.fromisoformat(row["reviewed_at"]) if row["reviewed_at"] else None,
+            reviewer=row["reviewer"],
+        )
+    except (ValueError, TypeError) as exc:
+        # A hand-edited/corrupt row must surface as the store's typed error so
+        # callers (e.g. the orchestrator) can degrade instead of crashing.
+        raise MemoryError_(f"Corrupt memory row id={row['id']}: {exc}") from exc
 
 
 class MemoryStore:
