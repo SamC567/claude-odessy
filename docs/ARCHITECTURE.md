@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- `log_level` config (F001) is validated at load time (DEBUG/INFO/WARNING/ERROR/CRITICAL, case-insensitive, normalised to upper case); an unknown value is a `ConfigError` instead of a raw `ValueError` traceback from the CLI.
+
 - `MemoryStore` review decisions (F009) record the reviewer name trimmed of surrounding whitespace.
 
 - `memory remember` CLI (F009) reports invalid input (confidence outside 0..1, empty content/source) as `error: ...` with exit code 2 instead of a traceback.

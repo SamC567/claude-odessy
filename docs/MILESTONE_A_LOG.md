@@ -232,3 +232,11 @@ Append-only log of scheduled-run changes.
 - Test: `test_review_records_trimmed_reviewer` (fails without the change, verified via stash).
 - Suite: 73 passed (baseline 72, python3.11).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
+
+## 2026-11-09 — F001 config rejects unknown log_level
+- Gap: `log_level: LOUD` passed config validation and then crashed CLI start-up with a raw `ValueError` from `logging.setLevel`.
+- Fix: `OdysseusConfig.log_level` validator accepts DEBUG/INFO/WARNING/ERROR/CRITICAL (case-insensitive, normalised to upper case); otherwise `ConfigError`.
+- Test: `test_unknown_log_level_is_rejected_and_known_is_normalised` (fails without the change, verified via stash).
+- Suite: 74 passed (baseline 73, python3.12 venv).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.
+- Decision: numeric/custom logging levels are not accepted (stdlib names only); reversible.

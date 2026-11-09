@@ -71,3 +71,13 @@ def test_inverted_health_thresholds_are_rejected(tmp_path):
     )
     with pytest.raises(ConfigError):
         load_config(bad_ram)
+
+
+def test_unknown_log_level_is_rejected_and_known_is_normalised(tmp_path):
+    bad = tmp_path / "level.yaml"
+    bad.write_text("log_level: LOUD\n")
+    with pytest.raises(ConfigError):
+        load_config(bad)
+    good = tmp_path / "ok.yaml"
+    good.write_text("log_level: debug\n")
+    assert load_config(good).log_level == "DEBUG"

@@ -18,12 +18,15 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from odysseus.exceptions import ConfigError
 
 ENV_PREFIX = "ODYSSEUS_"
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "default.yaml"
+
+
+_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 
 class ModelProviderConfig(BaseModel):
@@ -110,6 +113,16 @@ class OdysseusConfig(BaseModel):
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     health: HealthConfig = Field(default_factory=HealthConfig)
     log_level: str = Field(default="INFO")
+
+    @field_validator("log_level")
+    @classmethod
+    def _log_level_is_known(cls, value: str) -> str:
+        # An unknown level would otherwise surface as a raw ValueError from
+        # logging.setLevel at CLI start-up; reject it at load time instead.
+        normalised = value.strip().upper()
+        if normalised not in _LOG_LEVELS:
+            raise ValueError(f"log_level must be one of {', '.join(_LOG_LEVELS)}")
+        return normalised
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
