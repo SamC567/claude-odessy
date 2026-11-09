@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- `check_dependencies` (F073) warns when an installed dependency's major version is outside the supported range (pydantic 2, PyYAML 6, requests 2, mirroring requirements.txt); previously any installed version reported OK.
+
 - `check_memory_store` (F073) warns when the memory database file is not writable (previously reported OK). Windows behaviour untested here.
 
 - `run_diagnostics` (F073) names a crashed model-provider check `model_provider:<name>` (same as the healthy path) instead of bare `model_provider`, so consumers keying on the name see a consistent identifier.

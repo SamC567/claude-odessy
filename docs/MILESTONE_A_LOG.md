@@ -203,3 +203,11 @@ Append-only log of scheduled-run changes.
 - Suite: 69 passed (baseline 68, python3.11).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
 - Decision: WARNING not CRITICAL (system still answers read-only); reversible. Windows ACL-based read-only is only approximated by `os.access` (untested here).
+
+## 2026-11-09 — F073 dependency check flags unsupported major versions
+- Gap: `check_dependencies` reported OK for any installed version, e.g. pydantic 1.x which the code cannot run on.
+- Fix: `SUPPORTED_MAJOR_VERSIONS` (mirrors requirements.txt); mismatched major -> WARNING (missing stays CRITICAL).
+- Test: `test_dependencies_check_warns_on_unsupported_major_version` (fails without the change, verified via stash).
+- Suite: 70 passed (baseline 69, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.
+- Decision: WARNING not CRITICAL, only major version checked (no full specifier parsing, stdlib only); reversible.

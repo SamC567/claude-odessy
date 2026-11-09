@@ -100,6 +100,8 @@ def check_disk_space(path: Path, warn_percent: float, critical_percent: float) -
 
 
 REQUIRED_DEPENDENCIES = ("pydantic", "PyYAML", "requests")
+# Supported major versions, mirroring the ranges pinned in requirements.txt.
+SUPPORTED_MAJOR_VERSIONS = {"pydantic": 2, "PyYAML": 6, "requests": 2}
 
 
 def check_dependencies(required: tuple[str, ...] = REQUIRED_DEPENDENCIES) -> CheckResult:
@@ -109,14 +111,27 @@ def check_dependencies(required: tuple[str, ...] = REQUIRED_DEPENDENCIES) -> Che
     """
     versions: list[str] = []
     missing: list[str] = []
+    unsupported: list[str] = []
     for name in required:
         try:
-            versions.append(f"{name}=={metadata.version(name)}")
+            version = metadata.version(name)
         except metadata.PackageNotFoundError:
             missing.append(name)
+            continue
+        versions.append(f"{name}=={version}")
+        want = SUPPORTED_MAJOR_VERSIONS.get(name)
+        major = version.split(".")[0]
+        if want is not None and major.isdigit() and int(major) != want:
+            unsupported.append(f"{name}=={version} (need {want}.x)")
     if missing:
         return CheckResult(
             "dependencies", CheckStatus.CRITICAL, "missing: " + ", ".join(missing)
+        )
+    if unsupported:
+        return CheckResult(
+            "dependencies",
+            CheckStatus.WARNING,
+            "unsupported major version: " + ", ".join(unsupported),
         )
     return CheckResult("dependencies", CheckStatus.OK, ", ".join(versions))
 

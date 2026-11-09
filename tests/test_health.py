@@ -243,3 +243,17 @@ def test_memory_store_check_warns_when_db_not_writable(tmp_path, monkeypatch):
     check = next(c for c in report.checks if c.name == "memory_store")
     assert check.status == CheckStatus.WARNING
     assert "not writable" in check.detail
+
+
+def test_dependencies_check_warns_on_unsupported_major_version(monkeypatch):
+    from importlib import metadata
+
+    from odysseus.health import diagnostics
+
+    real = metadata.version
+    monkeypatch.setattr(
+        diagnostics.metadata, "version", lambda n: "1.10.0" if n == "pydantic" else real(n)
+    )
+    res = diagnostics.check_dependencies(("pydantic", "pytest"))
+    assert res.status == CheckStatus.WARNING
+    assert "pydantic==1.10.0" in res.detail
