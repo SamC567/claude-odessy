@@ -144,3 +144,7 @@ odysseus/
   `ConfigError`, instead of silently making the WARNING band unreachable.
 - GPU free-VRAM warning threshold (F073) is now configurable via
   `health.gpu_vram_warn_free_percent` (default 5, unchanged behaviour).
+- `run_diagnostics` (F073) now measures disk space at the memory DB's directory
+  when no `disk_path` is given (previously the process working directory, which
+  may be a different volume from the data). Falls back to `.` if that directory
+  does not exist yet.

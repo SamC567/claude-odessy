@@ -283,7 +283,13 @@ def run_diagnostics(
     disk_path: Path | None = None,
 ) -> HealthReport:
     """Run the full diagnostic suite and return a structured report."""
-    path = disk_path or Path(".")
+    # Default to the volume holding the memory DB (the data that matters),
+    # falling back to the working directory if its folder doesn't exist yet.
+    if disk_path is not None:
+        path = disk_path
+    else:
+        db_dir = Path(memory_store.db_path).parent
+        path = db_dir if db_dir.exists() else Path(".")
     checks = [
         _safe_check("python_version", check_python_version),
         _safe_check(

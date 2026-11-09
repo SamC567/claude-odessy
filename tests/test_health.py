@@ -178,3 +178,19 @@ def test_memory_store_check_detects_corrupt_database(tmp_path):
     db.write_bytes(bytes(data))
     result = check_memory_store(store)
     assert result.status == CheckStatus.CRITICAL
+
+
+def test_disk_check_defaults_to_memory_db_volume(tmp_path, monkeypatch):
+    from odysseus.health import diagnostics
+
+    seen = []
+    real = diagnostics.check_disk_space
+
+    def spy(path, warn, crit):
+        seen.append(path)
+        return real(path, warn, crit)
+
+    monkeypatch.setattr(diagnostics, "check_disk_space", spy)
+    memory = MemoryStore(tmp_path / "mem.sqlite3")
+    run_diagnostics(OdysseusConfig(), memory, EchoProvider())
+    assert seen == [tmp_path]

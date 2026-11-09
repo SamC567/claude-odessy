@@ -115,3 +115,11 @@ Append-only log of scheduled-run changes.
 - Test: `test_memory_store_check_detects_corrupt_database` (fails without the change, verified via stash).
 - Suite: 59 passed (baseline 58, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
+
+## 2026-11-09 — F073 disk check targets the memory DB volume
+- Gap: `run_diagnostics` defaulted disk-space checking to the working directory, not the volume holding the memory DB.
+- Fix: default path is `memory_store.db_path.parent` (fallback `.` if missing); explicit `disk_path` unchanged.
+- Test: `test_disk_check_defaults_to_memory_db_volume` (fails without the change, verified via stash).
+- Suite: 60 passed (baseline 59, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.
+- Decision: only the memory DB volume is checked by default (single path); multi-volume checks parked.
