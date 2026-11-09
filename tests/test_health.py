@@ -34,6 +34,8 @@ def test_a_failing_check_does_not_crash_the_whole_report(tmp_path, monkeypatch):
     model_check = [c for c in report.checks if c.name.startswith("model_provider")][0]
     assert model_check.status == CheckStatus.CRITICAL
     assert "boom" in model_check.detail
+    # Same check name as the healthy path, so consumers can key on it.
+    assert model_check.name == "model_provider:echo"
     # Other checks still ran despite the exploding one.
     assert any(c.name == "disk_space" for c in report.checks)
 

@@ -187,3 +187,11 @@ Append-only log of scheduled-run changes.
 - Test: `test_corrupt_row_raises_typed_memory_error` (fails without the change, verified via stash).
 - Suite: 68 passed (baseline 67, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
+
+## 2026-11-09 — F073 crashed provider check keeps its stable name
+- Gap: if a provider's `health_check` raised, the CRITICAL result was named `model_provider`, while the healthy/unhealthy paths use `model_provider:<name>`.
+- Fix: `run_diagnostics` passes `model_provider:<name>` to `_safe_check`.
+- Test: name assertion added to `test_a_failing_check_does_not_crash_the_whole_report` (fails without the change, verified via stash).
+- Suite: 68 passed (baseline 68, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.
+- Decision: a raising `health_check` stays CRITICAL (existing tested behaviour); not changed.

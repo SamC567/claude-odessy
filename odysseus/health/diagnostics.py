@@ -331,7 +331,7 @@ def run_diagnostics(
             ),
         ),
         _safe_check(
-            "model_provider",
+            f"model_provider:{model_provider.name}",
             lambda: check_model_provider(
                 model_provider, config.health.model_check_timeout_seconds
             ),
