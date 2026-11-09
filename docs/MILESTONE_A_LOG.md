@@ -165,3 +165,10 @@ Append-only log of scheduled-run changes.
 - Test: assertion added to `test_respond_includes_approved_memory_as_context` (fails without the change, verified via stash).
 - Suite: 65 passed (baseline 65, python3.11 venv).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
+
+## 2026-11-09 — F003 non-object JSON from Ollama no longer escapes fallback
+- Gap: `OllamaProvider.generate` called `data.get` on the decoded body; a JSON list/string raised `AttributeError`, which the orchestrator does not catch, so no echo fallback.
+- Fix: non-dict body raises `ModelProviderError` (retry loop unchanged).
+- Test: `test_ollama_provider_non_object_json_raises_provider_error` (fails without the change, verified via stash).
+- Suite: 66 passed (baseline 65, python3.12 system interpreter).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.

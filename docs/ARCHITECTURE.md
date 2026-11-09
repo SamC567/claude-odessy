@@ -95,6 +95,10 @@ odysseus/
 
 ## Recent fixes
 
+- `OllamaProvider.generate` (F003) raises `ModelProviderError` when the server returns a
+  non-object JSON body (previously an `AttributeError` escaped, bypassing the orchestrator's
+  echo fallback). Tested against a simulated server only.
+
 - `InteractionResult.memory_sources` (F009) exposes `(entry id, source)` for each memory
   used as context, and the orchestrator audits `orchestrator.memory_used`, so answers are
   traceable to their memory provenance.

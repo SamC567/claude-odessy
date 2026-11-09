@@ -93,6 +93,13 @@ def test_ollama_provider_empty_response_raises():
         provider.generate(GenerationRequest(prompt="hello"))
 
 
+def test_ollama_provider_non_object_json_raises_provider_error():
+    session = _FakeSession(post_result=_FakeResponse(["not", "an", "object"]))
+    provider = OllamaProvider(session=session, max_retries=0)
+    with pytest.raises(ModelProviderError):
+        provider.generate(GenerationRequest(prompt="hello"))
+
+
 def test_ollama_health_check_reports_unreachable():
     session = _FakeSession(get_exc=requests.exceptions.ConnectionError("refused"))
     provider = OllamaProvider(session=session)

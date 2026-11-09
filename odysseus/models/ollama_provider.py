@@ -56,6 +56,10 @@ class OllamaProvider(ModelProvider):
                 )
                 resp.raise_for_status()
                 data = resp.json()
+                if not isinstance(data, dict):
+                    raise ModelProviderError(
+                        f"Ollama returned a non-object JSON body: {type(data).__name__}"
+                    )
                 text = data.get("response", "")
                 if not isinstance(text, str) or not text:
                     raise ModelProviderError(
