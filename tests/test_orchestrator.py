@@ -70,6 +70,7 @@ def test_respond_includes_approved_memory_as_context(identity, memory_store):
     orchestrator = Orchestrator(identity=identity, provider=provider, memory=memory_store)
     result = orchestrator.respond("what is the vault code")
     assert "vault code" in " ".join(result.memory_context)
+    assert result.memory_sources == ((entry.id, entry.source),)
     assert provider.last_request.system_prompt is not None
     assert "vault code" in provider.last_request.system_prompt
 

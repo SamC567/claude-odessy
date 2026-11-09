@@ -32,6 +32,8 @@ class InteractionResult:
     provider_used: str
     is_live_model: bool
     memory_context: tuple[str, ...] = field(default_factory=tuple)
+    # Provenance of each memory_context item, same order: (entry id, source).
+    memory_sources: tuple[tuple[int | None, str], ...] = field(default_factory=tuple)
     degraded: bool = False
     degraded_reason: str | None = None
 
@@ -67,6 +69,9 @@ class Orchestrator:
 
         context_entries = self.memory.query(prompt, limit=self.memory_context_limit)
         context_texts = tuple(e.content for e in context_entries)
+        context_sources = tuple((e.id, e.source) for e in context_entries)
+        if context_entries:
+            audit("orchestrator.memory_used", entry_ids=[e.id for e in context_entries])
 
         system_prompt = self.identity.persona
         if context_texts:
@@ -97,6 +102,7 @@ class Orchestrator:
             provider_used=response.provider_name,
             is_live_model=response.is_live_model,
             memory_context=context_texts,
+            memory_sources=context_sources,
             degraded=degraded,
             degraded_reason=degraded_reason,
         )

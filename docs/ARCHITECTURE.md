@@ -95,6 +95,10 @@ odysseus/
 
 ## Recent fixes
 
+- `InteractionResult.memory_sources` (F009) exposes `(entry id, source)` for each memory
+  used as context, and the orchestrator audits `orchestrator.memory_used`, so answers are
+  traceable to their memory provenance.
+
 - `MemoryStore.query` (F009) strips surrounding punctuation from query words, so
   "pizza?" matches "pizza" (previously the trailing `?` defeated the match).
 

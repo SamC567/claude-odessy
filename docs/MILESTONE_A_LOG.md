@@ -158,3 +158,10 @@ Append-only log of scheduled-run changes.
 - Test: `test_query_ignores_punctuation_around_words` (fails without the change, verified via stash).
 - Suite: 65 passed (baseline 64, python3.11).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
+
+## 2026-11-09 — F009 source tracking on answers
+- Gap: `InteractionResult` returned memory context text only; callers/audit could not tell which entries (or sources) informed an answer.
+- Fix: `InteractionResult.memory_sources` (id, source) per context item + audit event `orchestrator.memory_used`.
+- Test: assertion added to `test_respond_includes_approved_memory_as_context` (fails without the change, verified via stash).
+- Suite: 65 passed (baseline 65, python3.11 venv).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.
