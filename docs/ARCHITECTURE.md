@@ -173,3 +173,8 @@ odysseus/
   `UPDATE` itself (`WHERE id = ? AND status = ?`), so two reviewers racing on one
   entry can no longer overwrite each other's decision; the loser gets a
   `ReviewInboxError`.
+
+- `Orchestrator.respond` (F001/F009) now degrades when `MemoryStore.query` raises
+  `MemoryError_`: it answers with no memory context, sets `degraded=True` with a
+  "memory unavailable" reason, and audits `orchestrator.memory_failed`
+  (previously the error crashed the interaction).

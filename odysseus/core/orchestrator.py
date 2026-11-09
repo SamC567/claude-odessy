@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from odysseus.core.identity import JarvisIdentity
-from odysseus.exceptions import ModelProviderError
+from odysseus.exceptions import MemoryError_, ModelProviderError
 from odysseus.logging_setup import audit
 from odysseus.memory.models import MemoryEntry
 from odysseus.memory.store import MemoryStore
@@ -67,7 +67,14 @@ class Orchestrator:
         if not prompt or not prompt.strip():
             raise ValueError("prompt must not be empty")
 
-        context_entries = self.memory.query(prompt, limit=self.memory_context_limit)
+        memory_failure: str | None = None
+        try:
+            context_entries = self.memory.query(prompt, limit=self.memory_context_limit)
+        except MemoryError_ as exc:
+            # Memory being unavailable is a supported degraded state, not a crash.
+            context_entries = []
+            memory_failure = f"memory unavailable: {exc}"
+            audit("orchestrator.memory_failed", error=str(exc))
         context_texts = tuple(e.content for e in context_entries)
         context_sources = tuple((e.id, e.source) for e in context_entries)
         if context_entries:
@@ -81,18 +88,20 @@ class Orchestrator:
 
         request = GenerationRequest(prompt=prompt, system_prompt=system_prompt)
 
-        degraded = False
-        degraded_reason = None
+        degraded = memory_failure is not None
+        degraded_reason = memory_failure
         try:
             response = self.provider.generate(request)
             audit("orchestrator.generate", provider=self.provider.name, degraded=False)
         except ModelProviderError as exc:
             degraded = True
-            degraded_reason = str(exc)
+            degraded_reason = (
+                f"{memory_failure}; {exc}" if memory_failure else str(exc)
+            )
             audit(
                 "orchestrator.provider_failed",
                 provider=self.provider.name,
-                error=degraded_reason,
+                error=str(exc),
             )
             response = self.fallback_provider.generate(request)
             audit("orchestrator.generate", provider=self.fallback_provider.name, degraded=True)

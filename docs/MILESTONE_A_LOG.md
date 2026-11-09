@@ -172,3 +172,11 @@ Append-only log of scheduled-run changes.
 - Test: `test_ollama_provider_non_object_json_raises_provider_error` (fails without the change, verified via stash).
 - Suite: 66 passed (baseline 65, python3.12 system interpreter).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
+
+## 2026-11-09 — F001/F009 orchestrator survives memory-store failure
+- Gap: a `MemoryError_` from `MemoryStore.query` propagated out of `Orchestrator.respond`, contradicting the "every module degrades, not crashes" principle.
+- Fix: `respond` catches it, answers without memory context, marks the result degraded ("memory unavailable: ...", combined with any provider failure reason) and audits `orchestrator.memory_failed`.
+- Test: `test_respond_degrades_when_memory_query_fails` (fails without the change, verified via stash).
+- Suite: 67 passed (baseline 66, python3.11).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.
+- Decision: only `MemoryError_` is caught (not arbitrary exceptions), so programming errors still surface; reversible.

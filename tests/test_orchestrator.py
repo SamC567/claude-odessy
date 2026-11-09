@@ -99,3 +99,17 @@ def orchestrator_remember_and_approve(identity, memory_store, content: str):
     entry = orchestrator.remember(content, source="user", confidence=0.9)
     memory_store.approve(entry.id, reviewer="test")
     return entry
+
+
+def test_respond_degrades_when_memory_query_fails(identity, memory_store):
+    from odysseus.exceptions import MemoryError_
+
+    def boom(*args, **kwargs):
+        raise MemoryError_("disk I/O error")
+
+    memory_store.query = boom
+    result = Orchestrator(identity, _CannedProvider(), memory_store).respond("hello")
+    assert result.text == "a canned answer"
+    assert result.memory_context == ()
+    assert result.degraded is True
+    assert "memory unavailable" in result.degraded_reason
