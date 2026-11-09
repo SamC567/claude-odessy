@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- `check_memory_store` (F073) warns when the memory database file is not writable (previously reported OK). Windows behaviour untested here.
+
 - `run_diagnostics` (F073) names a crashed model-provider check `model_provider:<name>` (same as the healthy path) instead of bare `model_provider`, so consumers keying on the name see a consistent identifier.
 
 - `MemoryStore` row decoding (F009) raises `MemoryError_` for a corrupt row (bad tags JSON,

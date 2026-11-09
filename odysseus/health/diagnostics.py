@@ -263,6 +263,14 @@ def check_memory_store(store: MemoryStore, pending_warn_count: int = 100) -> Che
     counts = store.count_by_status()
     pending = counts.get("pending", 0)
     detail = f"db={store.db_path} counts={counts}"
+    if not os.access(store.db_path, os.W_OK):
+        # Reads pass integrity_check on a read-only file, but remember()/review
+        # would fail; surface it before the user hits it.
+        return CheckResult(
+            "memory_store",
+            CheckStatus.WARNING,
+            f"memory database is not writable (new memories cannot be saved); {detail}",
+        )
     if pending > pending_warn_count:
         return CheckResult(
             "memory_store", CheckStatus.WARNING, f"{pending} pending review items; {detail}"

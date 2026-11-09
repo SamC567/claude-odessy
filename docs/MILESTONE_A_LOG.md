@@ -195,3 +195,11 @@ Append-only log of scheduled-run changes.
 - Suite: 68 passed (baseline 68, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider and memory store.
 - Decision: a raising `health_check` stays CRITICAL (existing tested behaviour); not changed.
+
+## 2026-11-09 — F073 memory store check detects a read-only database
+- Gap: `check_memory_store` passed on a read-only DB file (integrity check only reads), so diagnostics said OK while saving memories would fail.
+- Fix: WARNING "memory database is not writable" when `os.access(db_path, W_OK)` is false.
+- Test: `test_memory_store_check_warns_when_db_not_writable` (fails without the change, verified via stash).
+- Suite: 69 passed (baseline 68, python3.11).
+- Remaining F073 gap: per-service checks beyond model provider and memory store.
+- Decision: WARNING not CRITICAL (system still answers read-only); reversible. Windows ACL-based read-only is only approximated by `os.access` (untested here).

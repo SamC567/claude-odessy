@@ -227,3 +227,19 @@ def test_pending_review_warn_threshold_is_configurable(tmp_path):
     assert check.status == CheckStatus.WARNING
     default = run_diagnostics(OdysseusConfig(), store, EchoProvider(), disk_path=tmp_path)
     assert next(c for c in default.checks if c.name == "memory_store").status == CheckStatus.OK
+
+
+def test_memory_store_check_warns_when_db_not_writable(tmp_path, monkeypatch):
+    import os
+
+    store = MemoryStore(tmp_path / "mem.sqlite3")
+    real_access = os.access
+    monkeypatch.setattr(
+        os, "access",
+        lambda p, mode, *a, **k: False if Path(p) == store.db_path and mode == os.W_OK
+        else real_access(p, mode, *a, **k),
+    )
+    report = run_diagnostics(OdysseusConfig(), store, EchoProvider(), disk_path=tmp_path)
+    check = next(c for c in report.checks if c.name == "memory_store")
+    assert check.status == CheckStatus.WARNING
+    assert "not writable" in check.detail
