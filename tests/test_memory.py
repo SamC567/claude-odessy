@@ -237,3 +237,12 @@ def test_memory_entry_rejects_bad_tags():
         MemoryEntry(content="x", source="s", confidence=0.5, tags=("ok", 3))
     entry = MemoryEntry(content="x", source="s", confidence=0.5, tags=["a", "b"])
     assert entry.tags == ("a", "b")
+
+
+def test_query_with_very_long_text_does_not_crash(memory_store: MemoryStore):
+    stored = memory_store.submit_candidate(
+        MemoryEntry(content="likes pizza", source="user", confidence=0.9)
+    )
+    memory_store.approve(stored.id, reviewer="alice")
+    long_text = "pizza " + " ".join(f"word{i}" for i in range(5000))
+    assert [e.content for e in memory_store.query(long_text)] == ["likes pizza"]

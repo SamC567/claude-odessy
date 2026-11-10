@@ -41,6 +41,9 @@ CREATE INDEX IF NOT EXISTS idx_memory_status ON memory_entries(status);
 _PUNCT = ".,;:!?\"'()[]{}<>"
 
 
+_MAX_QUERY_TERMS = 50
+
+
 def _escape_like(term: str) -> str:
     """Escape SQL LIKE wildcards so user text is matched literally."""
     return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -213,7 +216,12 @@ class MemoryStore:
             return []
         # Strip surrounding punctuation so "pizza?" matches "pizza".
         words = [w for w in (t.strip(_PUNCT) for t in text.split()) if len(w) >= 3]
-        patterns = {text} | set(words)
+        # Bound the OR-chain: SQLite rejects expression trees deeper than 1000,
+        # so an unbounded query (e.g. a pasted document) would raise a raw
+        # sqlite3.OperationalError. Keep the whole text plus the first
+        # distinct words (order-preserving, deterministic).
+        distinct_words = list(dict.fromkeys(words))[:_MAX_QUERY_TERMS]
+        patterns = {text} | set(distinct_words)
         # Unicode-aware case-insensitive match: SQLite's built-in LIKE only
         # folds ASCII, so fold both sides with str.casefold() (same rule the
         # duplicate check uses).

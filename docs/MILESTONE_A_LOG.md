@@ -272,3 +272,11 @@ Append-only log of scheduled-run changes.
 - Suite: 81 passed (baseline 80, python3.11).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: WARNING (consistent with the existing audit_log check); reversible.
+
+## 2026-11-10 — F009 query bounded for very long input
+- Gap: `MemoryStore.query` with thousands of words raised a raw `sqlite3.OperationalError` (expression tree too large).
+- Fix: terms capped at the first 50 distinct words plus the whole text (`_MAX_QUERY_TERMS`).
+- Test: `test_query_with_very_long_text_does_not_crash` (fails without the change, verified via stash).
+- Suite: 82 passed (baseline 81, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: cap of 50 terms is arbitrary; reversible constant.
