@@ -277,7 +277,7 @@ class MemoryStore:
         reviewer: str,
         expected: MemoryStatus = MemoryStatus.PENDING,
     ) -> MemoryEntry:
-        if not reviewer or not reviewer.strip():
+        if not isinstance(reviewer, str) or not reviewer.strip():
             raise ReviewInboxError("A non-empty reviewer is required for review decisions")
         reviewer = reviewer.strip()  # keep the recorded identity free of stray whitespace
         existing = self.get(entry_id)

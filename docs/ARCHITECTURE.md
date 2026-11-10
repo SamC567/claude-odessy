@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- Review decisions (F009) reject a non-string reviewer with `ReviewInboxError` (previously an obscure `AttributeError`).
+
 - `MemoryStore.query` (F009) raises a clear `TypeError` for non-string text or a non-int limit (previously obscure `AttributeError`/comparison errors).
 
 - `MemoryEntry` (F009) rejects a non-numeric or bool `confidence` with `ValueError` (previously a raw `TypeError` for strings/None, and `True` was accepted as 1.0).

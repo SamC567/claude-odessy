@@ -320,3 +320,11 @@ Append-only log of scheduled-run changes.
 - Suite: 87 passed (baseline 86, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: TypeError (programmer error, not data error); reversible.
+
+## 2026-11-10 — F009 review decisions validate reviewer type
+- Gap: `approve/reject/retract` with a non-string reviewer (e.g. an int) raised an obscure `AttributeError` from `.strip()`.
+- Fix: `_review` raises `ReviewInboxError` unless reviewer is a non-blank `str`.
+- Test: `test_review_rejects_non_string_reviewer` (fails without the change, verified via stash).
+- Suite: 88 passed (baseline 87, python3.12/3.13 env).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: ReviewInboxError (same as blank reviewer); reversible.

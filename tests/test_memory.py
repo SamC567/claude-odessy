@@ -267,3 +267,11 @@ def test_query_rejects_wrong_argument_types(memory_store: MemoryStore):
         memory_store.query("pizza", limit="5")  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="query limit must be an int"):
         memory_store.query("pizza", limit=True)
+
+
+def test_review_rejects_non_string_reviewer(memory_store: MemoryStore):
+    stored = memory_store.submit_candidate(MemoryEntry(content="reviewer type", source="t", confidence=0.5))
+    for bad in (123, b"bob", ["bob"]):
+        with pytest.raises(ReviewInboxError):
+            memory_store.approve(stored.id, reviewer=bad)
+    assert memory_store.get(stored.id).status == MemoryStatus.PENDING
