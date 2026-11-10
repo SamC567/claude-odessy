@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- `MemoryEntry` (F009) rejects a non-numeric or bool `confidence` with `ValueError` (previously a raw `TypeError` for strings/None, and `True` was accepted as 1.0).
+
 - `MemoryStore(auto_approve_threshold=)` (F009) validates the value (number in 0..1, not bool) at construction; previously only the config path did, so a direct caller passing e.g. -1 would silently auto-approve every candidate and bypass the review inbox.
 
 - `load_config(path)` (F001) raises `ConfigError` for an explicitly given config path that does not exist (previously silently used defaults); the default path remains optional.

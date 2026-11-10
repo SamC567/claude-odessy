@@ -304,3 +304,11 @@ Append-only log of scheduled-run changes.
 - Suite: 85 passed (baseline 84, python3.11).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: ValueError (same as MemoryEntry validation); reversible.
+
+## 2026-11-10 — F009 MemoryEntry validates confidence type
+- Gap: `confidence="0.5"`/`None` raised a raw `TypeError`; `True` was accepted as 1.0.
+- Fix: `MemoryEntry.__post_init__` raises `ValueError` unless confidence is an int/float (not bool) in 0..1.
+- Test: `test_memory_entry_rejects_non_numeric_confidence` (fails without the change, verified via stash).
+- Suite: 86 passed (baseline 85, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: ValueError, consistent with other fields; reversible.

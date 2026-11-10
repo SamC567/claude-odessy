@@ -228,6 +228,12 @@ def test_review_records_trimmed_reviewer(memory_store: MemoryStore):
     assert approved.reviewer == "sam"
 
 
+def test_memory_entry_rejects_non_numeric_confidence():
+    for bad in ("0.5", None, True):
+        with pytest.raises(ValueError, match="confidence"):
+            MemoryEntry(content="x", source="s", confidence=bad)
+
+
 def test_memory_entry_rejects_bad_tags():
     with pytest.raises(ValueError):
         MemoryEntry(content="x", source="s", confidence=0.5, tags="food")

@@ -46,6 +46,9 @@ class MemoryEntry:
             raise ValueError("MemoryEntry.content must not be empty")
         if not self.source or not self.source.strip():
             raise ValueError("MemoryEntry.source must not be empty")
+        if isinstance(self.confidence, bool) or not isinstance(self.confidence, (int, float)):
+            # A string would raise a raw TypeError on comparison; a bool is almost certainly a mistake.
+            raise ValueError("MemoryEntry.confidence must be a number")
         if not (0.0 <= self.confidence <= 1.0):
             raise ValueError("MemoryEntry.confidence must be between 0.0 and 1.0")
         if isinstance(self.tags, str):
