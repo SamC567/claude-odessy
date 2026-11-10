@@ -289,3 +289,14 @@ def test_audit_log_check_warns_when_path_is_wrong_kind_of_entry(tmp_path):
     as_dir = tmp_path / "audit.log"
     as_dir.mkdir()  # directory where the log file should be
     assert check_audit_log(as_dir).status == CheckStatus.WARNING
+
+
+def test_safe_check_failure_detail_names_exception_type():
+    from odysseus.health.diagnostics import _safe_check
+
+    def boom():
+        raise KeyError("x")
+
+    result = _safe_check("demo", boom)
+    assert result.status == CheckStatus.CRITICAL
+    assert "KeyError" in result.detail

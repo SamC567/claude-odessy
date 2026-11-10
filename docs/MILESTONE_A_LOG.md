@@ -352,3 +352,11 @@ Append-only log of scheduled-run changes.
 - Suite: 91 passed (baseline 90, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: reject rather than strip/redact (never silently alter credentials); reversible.
+
+## 2026-11-10 — F073 crashed-check detail names the exception type
+- Gap: a check that raised (e.g. `KeyError('x')`) was reported as `check raised: 'x'`, with no hint of the error type.
+- Fix: `_safe_check` detail is now `check raised <ExceptionType>: <message>`.
+- Test: `test_safe_check_failure_detail_names_exception_type` (fails without the change, verified via stash).
+- Suite: 92 passed (baseline 91, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: wording change only; existing tests assert on message substrings and still pass; reversible.

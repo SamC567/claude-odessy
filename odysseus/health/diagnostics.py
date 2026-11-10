@@ -75,7 +75,7 @@ def _safe_check(name: str, fn) -> CheckResult:
     try:
         return fn()
     except Exception as exc:  # noqa: BLE001 - diagnostics must never crash
-        return CheckResult(name=name, status=CheckStatus.CRITICAL, detail=f"check raised: {exc}")
+        return CheckResult(name=name, status=CheckStatus.CRITICAL, detail=f"check raised {type(exc).__name__}: {exc}")
 
 
 def check_python_version() -> CheckResult:
