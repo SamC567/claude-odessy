@@ -72,6 +72,14 @@ class MemoryStore:
     """Persistent memory with structured storage, retrieval, and review inbox."""
 
     def __init__(self, db_path: str | Path, auto_approve_threshold: float | None = None) -> None:
+        if auto_approve_threshold is not None and not (
+            isinstance(auto_approve_threshold, (int, float))
+            and not isinstance(auto_approve_threshold, bool)
+            and 0.0 <= auto_approve_threshold <= 1.0
+        ):
+            # Direct construction bypasses config validation; a negative value
+            # would silently auto-approve every candidate (skipping review).
+            raise ValueError("auto_approve_threshold must be a number between 0.0 and 1.0")
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.auto_approve_threshold = auto_approve_threshold

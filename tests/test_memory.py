@@ -246,3 +246,9 @@ def test_query_with_very_long_text_does_not_crash(memory_store: MemoryStore):
     memory_store.approve(stored.id, reviewer="alice")
     long_text = "pizza " + " ".join(f"word{i}" for i in range(5000))
     assert [e.content for e in memory_store.query(long_text)] == ["likes pizza"]
+
+
+def test_store_rejects_out_of_range_auto_approve_threshold(tmp_path):
+    for bad in (-0.1, 1.5, True, "0.5"):
+        with pytest.raises(ValueError):
+            MemoryStore(tmp_path / "mem.sqlite3", auto_approve_threshold=bad)

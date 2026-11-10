@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- `MemoryStore(auto_approve_threshold=)` (F009) validates the value (number in 0..1, not bool) at construction; previously only the config path did, so a direct caller passing e.g. -1 would silently auto-approve every candidate and bypass the review inbox.
+
 - `load_config(path)` (F001) raises `ConfigError` for an explicitly given config path that does not exist (previously silently used defaults); the default path remains optional.
 
 - CLI `health` (F073) no longer passes the working directory as `disk_path`, so disk space is measured on the memory DB's volume (the `run_diagnostics` default) instead of silently overriding it.

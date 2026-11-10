@@ -296,3 +296,11 @@ Append-only log of scheduled-run changes.
 - Suite: 84 passed (baseline 83, python3.11).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: strict error for explicit paths only (changes prior documented "never raises" behaviour); reversible.
+
+## 2026-11-10 — F009 store validates auto_approve_threshold
+- Gap: only the config loader range-checked `auto_approve_threshold`; constructing `MemoryStore` directly with a negative value auto-approved every candidate, bypassing the review inbox.
+- Fix: `MemoryStore.__init__` raises `ValueError` unless the threshold is None or a number (not bool) in 0..1.
+- Test: `test_store_rejects_out_of_range_auto_approve_threshold` (fails without the change, verified via stash).
+- Suite: 85 passed (baseline 84, python3.11).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: ValueError (same as MemoryEntry validation); reversible.
