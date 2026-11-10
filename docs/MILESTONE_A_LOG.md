@@ -280,3 +280,11 @@ Append-only log of scheduled-run changes.
 - Suite: 82 passed (baseline 81, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: cap of 50 terms is arbitrary; reversible constant.
+
+## 2026-11-10 — F073 CLI health measures disk at the memory DB volume
+- Gap: `cmd_health` passed `Path(".")` as `disk_path`, defeating the earlier fix that defaults disk checks to the memory DB's directory.
+- Fix: CLI no longer passes `disk_path`.
+- Test: `test_cli_health_measures_disk_at_memory_db_directory` (fails without the change, verified via stash).
+- Suite: 83 passed (baseline 82, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: none beyond the above; reversible.

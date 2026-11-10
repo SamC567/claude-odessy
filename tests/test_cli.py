@@ -82,3 +82,10 @@ def test_cli_memory_remember_rejects_invalid_input_cleanly(tmp_path, capsys):
                "--source", "user", "--confidence", "2"])
     assert rc == 2
     assert "confidence" in capsys.readouterr().err
+
+
+def test_cli_health_measures_disk_at_memory_db_directory(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    rc = main(["--config", str(config_path), "health"])
+    assert rc == 0
+    assert f"used at {tmp_path}" in capsys.readouterr().out

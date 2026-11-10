@@ -50,7 +50,9 @@ def cmd_chat(args: argparse.Namespace) -> int:
 
 def cmd_health(args: argparse.Namespace) -> int:
     orchestrator, config = _build_orchestrator(args.config)
-    report = run_diagnostics(config, orchestrator.memory, orchestrator.provider, Path("."),
+    # disk_path is left unset so disk space is measured on the memory DB's
+    # volume (the data that matters), not the process working directory.
+    report = run_diagnostics(config, orchestrator.memory, orchestrator.provider,
                              audit_log_path=Path("data/audit.log"))
     if args.json:
         print(json.dumps(report.as_dict(), indent=2))

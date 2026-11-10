@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- CLI `health` (F073) no longer passes the working directory as `disk_path`, so disk space is measured on the memory DB's volume (the `run_diagnostics` default) instead of silently overriding it.
+
 - `MemoryStore.query` (F009) caps the keyword terms used per query (first 50 distinct words plus the whole text); previously a very long query raised a raw `sqlite3.OperationalError` (expression tree too large). Words beyond the cap are not searched.
 
 - `check_audit_log` (F073) also WARNs when a regular file sits where the log directory should be, or a directory where the log file should be (previously reported OK because `os.access` said writable).
