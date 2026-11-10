@@ -176,11 +176,15 @@ def load_config(
 ) -> OdysseusConfig:
     """Load configuration from YAML + environment, with optional overrides.
 
-    Never raises on a missing file; a missing/empty file just means
-    "use the defaults". Raises ``ConfigError`` for malformed YAML or
-    values that fail validation.
+    A missing *default* file (or an empty file) just means "use the
+    defaults". An explicitly given ``path`` that does not exist is a
+    ``ConfigError`` (a typo'd path must not silently fall back to
+    defaults). Also raises ``ConfigError`` for malformed YAML or values
+    that fail validation.
     """
     yaml_path = Path(path) if path is not None else DEFAULT_CONFIG_PATH
+    if path is not None and not yaml_path.is_file():
+        raise ConfigError(f"Config file not found: {yaml_path}")
     data = _read_yaml(yaml_path)
     data = _apply_env_overrides(data)
     if overrides:

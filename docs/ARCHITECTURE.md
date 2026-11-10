@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- `load_config(path)` (F001) raises `ConfigError` for an explicitly given config path that does not exist (previously silently used defaults); the default path remains optional.
+
 - CLI `health` (F073) no longer passes the working directory as `disk_path`, so disk space is measured on the memory DB's volume (the `run_diagnostics` default) instead of silently overriding it.
 
 - `MemoryStore.query` (F009) caps the keyword terms used per query (first 50 distinct words plus the whole text); previously a very long query raised a raw `sqlite3.OperationalError` (expression tree too large). Words beyond the cap are not searched.

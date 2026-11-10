@@ -288,3 +288,11 @@ Append-only log of scheduled-run changes.
 - Suite: 83 passed (baseline 82, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: none beyond the above; reversible.
+
+## 2026-11-10 — F001 explicit missing config path is an error
+- Gap: `--config typo.yaml` silently fell back to defaults, so a mistyped path ran with the wrong model/memory settings.
+- Fix: `load_config(path)` raises `ConfigError` when an explicitly given path is not a file; the default path stays optional. CLI reports it as `error: ...`, exit 2.
+- Test: `test_explicit_missing_config_path_is_an_error` (fails without the change, verified via stash). `test_defaults_without_file` encoded the old behaviour and was changed to use an empty file (`test_defaults_with_empty_file`).
+- Suite: 84 passed (baseline 83, python3.11).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: strict error for explicit paths only (changes prior documented "never raises" behaviour); reversible.

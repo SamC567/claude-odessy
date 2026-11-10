@@ -8,8 +8,10 @@ from odysseus.config import load_config
 from odysseus.exceptions import ConfigError
 
 
-def test_defaults_without_file(tmp_path):
-    config = load_config(tmp_path / "does-not-exist.yaml")
+def test_defaults_with_empty_file(tmp_path):
+    empty = tmp_path / "empty.yaml"
+    empty.write_text("")
+    config = load_config(empty)
     assert config.identity.name == "Jarvis"
     assert config.model.provider == "echo"
     assert config.memory.auto_approve_threshold is None
@@ -92,3 +94,10 @@ def test_malformed_model_base_url_is_rejected(tmp_path, url):
     good = tmp_path / "ok.yaml"
     good.write_text("model:\n  base_url: ' http://127.0.0.1:11434 '\n")
     assert load_config(good).model.base_url == "http://127.0.0.1:11434"
+
+
+def test_explicit_missing_config_path_is_an_error(tmp_path):
+    with pytest.raises(ConfigError):
+        load_config(tmp_path / "typo.yaml")
+    # The default path stays optional.
+    assert load_config() is not None
