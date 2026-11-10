@@ -290,3 +290,17 @@ def test_submit_candidate_rejects_non_memory_entry(memory_store: MemoryStore):
         memory_store.submit_candidate(None)  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="expects a MemoryEntry"):
         memory_store.submit_candidate("likes pizza")  # type: ignore[arg-type]
+
+
+def test_read_paths_raise_typed_error_on_corrupt_database(memory_store: MemoryStore):
+    from odysseus.exceptions import MemoryError_
+
+    memory_store.db_path.write_bytes(b"this is not a sqlite database" * 100)
+    with pytest.raises(MemoryError_):
+        memory_store.query("anything")
+    with pytest.raises(MemoryError_):
+        memory_store.get(1)
+    with pytest.raises(MemoryError_):
+        memory_store.list_pending()
+    with pytest.raises(MemoryError_):
+        memory_store.count_by_status()

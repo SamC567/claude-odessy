@@ -376,3 +376,11 @@ Append-only log of scheduled-run changes.
 - Suite: 94 passed (baseline 93, python3.11 after `pip install -r requirements-dev.txt`).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: TypeError (programmer error), consistent with `query`; reversible.
+
+## 2026-11-10 — F009 read paths raise typed MemoryError_
+- Gap: `query/get/list_*/count_by_status` let raw `sqlite3.DatabaseError` escape on a corrupt DB, bypassing the orchestrator's `except MemoryError_` degradation (writes were already wrapped).
+- Fix: shared `MemoryStore._read` helper converts `sqlite3.Error` to `MemoryError_`; used by all read methods.
+- Test: `test_read_paths_raise_typed_error_on_corrupt_database` (fails without the change, verified via stash).
+- Suite: 95 passed (baseline 94, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: no behaviour change on healthy DBs; reversible.

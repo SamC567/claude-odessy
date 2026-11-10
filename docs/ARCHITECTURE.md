@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- `MemoryStore` read paths (`query`, `get`, `list_*`, `count_by_status`) (F009) raise `MemoryError_` on a corrupt/unreadable database (previously raw `sqlite3` errors that bypassed the orchestrator's graceful degradation).
+
 - `MemoryStore.submit_candidate` (F009) raises a clear `TypeError` for a non-`MemoryEntry` argument (previously obscure `AttributeError`).
 
 - `HealthReport.overall_status` (F073) is WARNING for a report with no checks (previously OK, claiming health without evidence).

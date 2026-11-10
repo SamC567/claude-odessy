@@ -93,6 +93,17 @@ class MemoryStore:
         conn.row_factory = sqlite3.Row
         return conn
 
+    def _read(self, sql: str, params=(), *, one: bool = False, setup=None):
+        """Run a read-only query, converting sqlite3 failures to MemoryError_."""
+        try:
+            with closing(self._connect()) as conn:
+                if setup is not None:
+                    setup(conn)
+                cur = conn.execute(sql, params)
+                return cur.fetchone() if one else cur.fetchall()
+        except sqlite3.Error as exc:
+            raise MemoryError_(f"Could not read memory database at {self.db_path}: {exc}") from exc
+
     def _init_schema(self) -> None:
         with closing(self._connect()) as conn:
             try:
@@ -173,11 +184,10 @@ class MemoryStore:
         and surrounding/repeated whitespace), if any. REJECTED entries do not
         count, so a previously rejected fact can be proposed again."""
         wanted = " ".join(content.split()).casefold()
-        with closing(self._connect()) as conn:
-            rows = conn.execute(
-                "SELECT * FROM memory_entries WHERE status IN (?, ?) ORDER BY id ASC",
-                (MemoryStatus.PENDING.value, MemoryStatus.APPROVED.value),
-            ).fetchall()
+        rows = self._read(
+            "SELECT * FROM memory_entries WHERE status IN (?, ?) ORDER BY id ASC",
+            (MemoryStatus.PENDING.value, MemoryStatus.APPROVED.value),
+        )
         for row in rows:
             if " ".join(row["content"].split()).casefold() == wanted:
                 return _row_to_entry(row)
@@ -186,10 +196,9 @@ class MemoryStore:
     # -- Reading -------------------------------------------------------
 
     def get(self, entry_id: int) -> MemoryEntry | None:
-        with closing(self._connect()) as conn:
-            row = conn.execute(
-                "SELECT * FROM memory_entries WHERE id = ?", (entry_id,)
-            ).fetchone()
+        row = self._read(
+            "SELECT * FROM memory_entries WHERE id = ?", (entry_id,), one=True
+        )
         return _row_to_entry(row) if row else None
 
     def list_pending(self) -> list[MemoryEntry]:
@@ -201,11 +210,10 @@ class MemoryStore:
         return self._list_by_status(MemoryStatus.APPROVED)
 
     def _list_by_status(self, status: MemoryStatus) -> list[MemoryEntry]:
-        with closing(self._connect()) as conn:
-            rows = conn.execute(
-                "SELECT * FROM memory_entries WHERE status = ? ORDER BY created_at ASC",
-                (status.value,),
-            ).fetchall()
+        rows = self._read(
+            "SELECT * FROM memory_entries WHERE status = ? ORDER BY created_at ASC",
+            (status.value,),
+        )
         return [_row_to_entry(r) for r in rows]
 
     def query(self, text: str, limit: int = 20) -> list[MemoryEntry]:
@@ -245,14 +253,15 @@ class MemoryStore:
         params: list[object] = [MemoryStatus.APPROVED.value]
         params.extend(f"%{_escape_like(p.casefold())}%" for p in patterns)
         params.append(limit)
-        with closing(self._connect()) as conn:
-            conn.create_function("fold", 1, lambda v: v.casefold() if v else v, deterministic=True)
-            rows = conn.execute(
-                f"SELECT * FROM memory_entries "
-                f"WHERE status = ? AND ({clauses}) "
-                f"ORDER BY confidence DESC, created_at DESC LIMIT ?",
-                params,
-            ).fetchall()
+        rows = self._read(
+            f"SELECT * FROM memory_entries "
+            f"WHERE status = ? AND ({clauses}) "
+            f"ORDER BY confidence DESC, created_at DESC LIMIT ?",
+            params,
+            setup=lambda conn: conn.create_function(
+                "fold", 1, lambda v: v.casefold() if v else v, deterministic=True
+            ),
+        )
         return [_row_to_entry(r) for r in rows]
 
     # -- Review inbox ----------------------------------------------------
@@ -321,10 +330,7 @@ class MemoryStore:
         return updated
 
     def count_by_status(self) -> dict[str, int]:
-        with closing(self._connect()) as conn:
-            rows = conn.execute(
-                "SELECT status, COUNT(*) as n FROM memory_entries GROUP BY status"
-            ).fetchall()
+        rows = self._read("SELECT status, COUNT(*) as n FROM memory_entries GROUP BY status")
         return {row["status"]: row["n"] for row in rows}
 
     def integrity_check(self) -> tuple[bool, str]:
