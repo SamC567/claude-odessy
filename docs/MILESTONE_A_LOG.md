@@ -312,3 +312,11 @@ Append-only log of scheduled-run changes.
 - Suite: 86 passed (baseline 85, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: ValueError, consistent with other fields; reversible.
+
+## 2026-11-10 — F009 query validates argument types
+- Gap: `MemoryStore.query(None)` raised an obscure `AttributeError`, and a non-int `limit` a `TypeError` from a comparison deep inside.
+- Fix: `query` raises a clear `TypeError` for non-str text or a non-int/bool limit.
+- Test: `test_query_rejects_wrong_argument_types` (fails without the change, verified via stash).
+- Suite: 87 passed (baseline 86, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: TypeError (programmer error, not data error); reversible.

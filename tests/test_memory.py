@@ -258,3 +258,12 @@ def test_store_rejects_out_of_range_auto_approve_threshold(tmp_path):
     for bad in (-0.1, 1.5, True, "0.5"):
         with pytest.raises(ValueError):
             MemoryStore(tmp_path / "mem.sqlite3", auto_approve_threshold=bad)
+
+
+def test_query_rejects_wrong_argument_types(memory_store: MemoryStore):
+    with pytest.raises(TypeError, match="query text must be a string"):
+        memory_store.query(None)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="query limit must be an int"):
+        memory_store.query("pizza", limit="5")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="query limit must be an int"):
+        memory_store.query("pizza", limit=True)

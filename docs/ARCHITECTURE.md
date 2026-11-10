@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- `MemoryStore.query` (F009) raises a clear `TypeError` for non-string text or a non-int limit (previously obscure `AttributeError`/comparison errors).
+
 - `MemoryEntry` (F009) rejects a non-numeric or bool `confidence` with `ValueError` (previously a raw `TypeError` for strings/None, and `True` was accepted as 1.0).
 
 - `MemoryStore(auto_approve_threshold=)` (F009) validates the value (number in 0..1, not bool) at construction; previously only the config path did, so a direct caller passing e.g. -1 would silently auto-approve every candidate and bypass the review inbox.

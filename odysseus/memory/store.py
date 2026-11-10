@@ -218,6 +218,10 @@ class MemoryStore:
         Pending/rejected entries are never surfaced to normal retrieval --
         only reviewed, permanent memory is queryable this way.
         """
+        if not isinstance(text, str):
+            raise TypeError(f"query text must be a string, got {type(text).__name__}")
+        if isinstance(limit, bool) or not isinstance(limit, int):
+            raise TypeError(f"query limit must be an int, got {type(limit).__name__}")
         if not text.strip() or limit <= 0:
             # A blank query would otherwise match every approved entry, and a
             # negative LIMIT means "no limit" in SQLite.
