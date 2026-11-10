@@ -360,3 +360,11 @@ Append-only log of scheduled-run changes.
 - Suite: 92 passed (baseline 91, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: wording change only; existing tests assert on message substrings and still pass; reversible.
+
+## 2026-11-10 — F073 empty health report is not "OK"
+- Gap: `HealthReport` with zero checks reported `overall_status` OK, claiming health with no evidence.
+- Fix: empty report -> WARNING.
+- Test: `test_empty_report_is_not_reported_healthy` (fails without the change, verified via stash).
+- Suite: 93 passed (baseline 92, python3.13; note `python` lacked deps, used `python3.13 -m pytest`).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: WARNING rather than CRITICAL (no check failed, just no evidence); reversible.

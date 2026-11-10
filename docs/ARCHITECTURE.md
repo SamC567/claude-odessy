@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- `HealthReport.overall_status` (F073) is WARNING for a report with no checks (previously OK, claiming health without evidence).
+
 - Config (F003/F001) rejects `model.base_url` with embedded credentials (`user:pass@host`), which would otherwise leak into diagnostics/audit output and the config file.
 
 - Config (F003/F001) rejects a blank `model.model_name` when `provider: ollama` (previously only failed at request time); the echo provider still tolerates it.

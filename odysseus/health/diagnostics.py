@@ -44,6 +44,9 @@ class HealthReport:
 
     @property
     def overall_status(self) -> CheckStatus:
+        # A report with no checks proves nothing; never call it healthy.
+        if not self.checks:
+            return CheckStatus.WARNING
         statuses = {c.status for c in self.checks}
         if CheckStatus.CRITICAL in statuses:
             return CheckStatus.CRITICAL

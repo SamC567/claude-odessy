@@ -300,3 +300,12 @@ def test_safe_check_failure_detail_names_exception_type():
     result = _safe_check("demo", boom)
     assert result.status == CheckStatus.CRITICAL
     assert "KeyError" in result.detail
+
+
+def test_empty_report_is_not_reported_healthy():
+    from datetime import datetime, timezone
+
+    from odysseus.health.diagnostics import CheckStatus, HealthReport
+
+    report = HealthReport(generated_at=datetime.now(timezone.utc))
+    assert report.overall_status == CheckStatus.WARNING
