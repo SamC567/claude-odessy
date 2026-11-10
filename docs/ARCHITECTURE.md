@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- Config (F003/F001) rejects `model.base_url` with embedded credentials (`user:pass@host`), which would otherwise leak into diagnostics/audit output and the config file.
+
 - Config (F003/F001) rejects a blank `model.model_name` when `provider: ollama` (previously only failed at request time); the echo provider still tolerates it.
 
 - `MemoryEntry` (F009) rejects non-string `content`/`source` with `ValueError` (previously an obscure `AttributeError` from `.strip()`).

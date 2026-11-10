@@ -344,3 +344,11 @@ Append-only log of scheduled-run changes.
 - Suite: 90 passed (baseline 89, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: considered making a raising provider health_check a WARNING, but an existing test deliberately asserts CRITICAL; left unchanged.
+
+## 2026-11-10 — F003 base_url rejects embedded credentials
+- Gap: `model.base_url: http://user:pass@host` loaded fine; the URL is echoed in diagnostics/audit output, so credentials would leak and live in the config file.
+- Fix: `ModelProviderConfig` base_url validator raises (-> `ConfigError`) when the URL has a username or password.
+- Test: `test_model_base_url_rejects_embedded_credentials` (fails without the change, verified via stash).
+- Suite: 91 passed (baseline 90, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: reject rather than strip/redact (never silently alter credentials); reversible.

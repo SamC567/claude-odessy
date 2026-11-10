@@ -111,3 +111,13 @@ def test_ollama_provider_rejects_blank_model_name(tmp_path):
     ok = tmp_path / "ok.yaml"
     ok.write_text("model:\n  provider: echo\n  model_name: ''\n")
     assert load_config(ok).model.provider == "echo"
+
+
+def test_model_base_url_rejects_embedded_credentials(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("model:\n  base_url: 'http://user:secret@127.0.0.1:11434'\n")
+    with pytest.raises(ConfigError):
+        load_config(bad)
+    ok = tmp_path / "ok.yaml"
+    ok.write_text("model:\n  base_url: 'http://127.0.0.1:11434'\n")
+    assert load_config(ok).model.base_url == "http://127.0.0.1:11434"

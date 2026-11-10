@@ -53,6 +53,10 @@ class ModelProviderConfig(BaseModel):
         parsed = urlparse(value.strip())
         if parsed.scheme not in ("http", "https") or not parsed.hostname:
             raise ValueError("model.base_url must be an http(s) URL with a host")
+        if parsed.username is not None or parsed.password is not None:
+            # base_url is echoed in diagnostics/audit output; credentials
+            # embedded in it would leak there and into the config file.
+            raise ValueError("model.base_url must not embed credentials (user:pass@host)")
         return value.strip()
 
     @model_validator(mode="after")
