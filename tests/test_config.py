@@ -101,3 +101,13 @@ def test_explicit_missing_config_path_is_an_error(tmp_path):
         load_config(tmp_path / "typo.yaml")
     # The default path stays optional.
     assert load_config() is not None
+
+
+def test_ollama_provider_rejects_blank_model_name(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("model:\n  provider: ollama\n  model_name: '  '\n")
+    with pytest.raises(ConfigError):
+        load_config(bad)
+    ok = tmp_path / "ok.yaml"
+    ok.write_text("model:\n  provider: echo\n  model_name: ''\n")
+    assert load_config(ok).model.provider == "echo"

@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- Config (F003/F001) rejects a blank `model.model_name` when `provider: ollama` (previously only failed at request time); the echo provider still tolerates it.
+
 - `MemoryEntry` (F009) rejects non-string `content`/`source` with `ValueError` (previously an obscure `AttributeError` from `.strip()`).
 
 - Review decisions (F009) reject a non-string reviewer with `ReviewInboxError` (previously an obscure `AttributeError`).

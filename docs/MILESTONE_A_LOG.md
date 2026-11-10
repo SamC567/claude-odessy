@@ -336,3 +336,11 @@ Append-only log of scheduled-run changes.
 - Suite: 89 passed (baseline 88, python3.12).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: ValueError, consistent with other field checks; reversible.
+
+## 2026-11-10 — F003 ollama config rejects blank model_name
+- Gap: `provider: ollama` with a blank `model_name` loaded fine and only failed at request time.
+- Fix: `ModelProviderConfig` model validator raises (-> `ConfigError`) for blank model_name when provider is ollama; echo unaffected.
+- Test: `test_ollama_provider_rejects_blank_model_name` (fails without the change, verified via stash).
+- Suite: 90 passed (baseline 89, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: considered making a raising provider health_check a WARNING, but an existing test deliberately asserts CRITICAL; left unchanged.

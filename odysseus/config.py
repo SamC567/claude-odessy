@@ -55,6 +55,14 @@ class ModelProviderConfig(BaseModel):
             raise ValueError("model.base_url must be an http(s) URL with a host")
         return value.strip()
 
+    @model_validator(mode="after")
+    def _ollama_needs_model_name(self) -> "ModelProviderConfig":
+        # A blank model would only fail at request time (HTTP 400 from the
+        # server); the echo provider tolerates it, so only check for ollama.
+        if self.provider == "ollama" and not self.model_name.strip():
+            raise ValueError("model.model_name must not be blank for the ollama provider")
+        return self
+
 
 class MemoryConfig(BaseModel):
     """Configuration for persistent memory + review inbox (F009)."""
