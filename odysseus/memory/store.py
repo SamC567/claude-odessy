@@ -110,6 +110,10 @@ class MemoryStore:
         confidence meets it -- an explicit, auditable opt-in rather than
         a silent default.
         """
+        if not isinstance(entry, MemoryEntry):
+            raise TypeError(
+                f"submit_candidate expects a MemoryEntry, got {type(entry).__name__}"
+            )
         duplicate = self._find_live_duplicate(entry.content)
         if duplicate is not None:
             audit(

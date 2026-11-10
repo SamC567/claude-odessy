@@ -368,3 +368,11 @@ Append-only log of scheduled-run changes.
 - Suite: 93 passed (baseline 92, python3.13; note `python` lacked deps, used `python3.13 -m pytest`).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: WARNING rather than CRITICAL (no check failed, just no evidence); reversible.
+
+## 2026-11-10 — F009 submit_candidate validates argument type
+- Gap: `submit_candidate(None)` / a non-MemoryEntry raised an obscure `AttributeError` on `.content`.
+- Fix: raises a clear `TypeError` up front.
+- Test: `test_submit_candidate_rejects_non_memory_entry` (fails without the change, verified via stash).
+- Suite: 94 passed (baseline 93, python3.11 after `pip install -r requirements-dev.txt`).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: TypeError (programmer error), consistent with `query`; reversible.

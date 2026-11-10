@@ -283,3 +283,10 @@ def test_review_rejects_non_string_reviewer(memory_store: MemoryStore):
         with pytest.raises(ReviewInboxError):
             memory_store.approve(stored.id, reviewer=bad)
     assert memory_store.get(stored.id).status == MemoryStatus.PENDING
+
+
+def test_submit_candidate_rejects_non_memory_entry(memory_store: MemoryStore):
+    with pytest.raises(TypeError, match="expects a MemoryEntry"):
+        memory_store.submit_candidate(None)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="expects a MemoryEntry"):
+        memory_store.submit_candidate("likes pizza")  # type: ignore[arg-type]

@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- `MemoryStore.submit_candidate` (F009) raises a clear `TypeError` for a non-`MemoryEntry` argument (previously obscure `AttributeError`).
+
 - `HealthReport.overall_status` (F073) is WARNING for a report with no checks (previously OK, claiming health without evidence).
 
 - Config (F003/F001) rejects `model.base_url` with embedded credentials (`user:pass@host`), which would otherwise leak into diagnostics/audit output and the config file.
