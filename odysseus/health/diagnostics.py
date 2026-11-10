@@ -339,18 +339,24 @@ def check_model_provider(
 
 def run_diagnostics(
     config: OdysseusConfig,
-    memory_store: MemoryStore,
+    memory_store: MemoryStore | None,
     model_provider: ModelProvider,
     disk_path: Path | None = None,
     audit_log_path: Path | None = None,
+    memory_store_error: str | None = None,
 ) -> HealthReport:
-    """Run the full diagnostic suite and return a structured report."""
+    """Run the full diagnostic suite and return a structured report.
+
+    ``memory_store`` may be None when the store could not even be opened (e.g. a
+    corrupt database); ``memory_store_error`` then becomes a CRITICAL
+    ``memory_store`` check so the rest of the report is still produced.
+    """
     # Default to the volume holding the memory DB (the data that matters),
     # falling back to the working directory if its folder doesn't exist yet.
     if disk_path is not None:
         path = disk_path
     else:
-        db_dir = Path(memory_store.db_path).parent
+        db_dir = Path(memory_store.db_path if memory_store is not None else config.memory.db_path).parent
         path = db_dir if db_dir.exists() else Path(".")
     checks = [
         _safe_check("python_version", check_python_version),
@@ -376,6 +382,11 @@ def run_diagnostics(
         _safe_check("config", lambda: check_config(config)),
         _safe_check("memory_store", lambda: check_memory_store(
                 memory_store, config.health.pending_review_warn_count
+            ) if memory_store is not None else CheckResult(
+                "memory_store",
+                CheckStatus.CRITICAL,
+                f"memory store could not be opened: {memory_store_error or 'unknown error'}; "
+                f"db={config.memory.db_path}",
             ),
         ),
         _safe_check(

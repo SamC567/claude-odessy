@@ -21,7 +21,7 @@ from pathlib import Path
 from odysseus.config import load_config
 from odysseus.core.identity import JarvisIdentity
 from odysseus.core.orchestrator import Orchestrator
-from odysseus.exceptions import OdysseusError
+from odysseus.exceptions import MemoryError_, OdysseusError
 from odysseus.health.diagnostics import run_diagnostics
 from odysseus.logging_setup import configure_logging
 from odysseus.memory.store import MemoryStore
@@ -49,11 +49,21 @@ def cmd_chat(args: argparse.Namespace) -> int:
 
 
 def cmd_health(args: argparse.Namespace) -> int:
-    orchestrator, config = _build_orchestrator(args.config)
     # disk_path is left unset so disk space is measured on the memory DB's
     # volume (the data that matters), not the process working directory.
-    report = run_diagnostics(config, orchestrator.memory, orchestrator.provider,
-                             audit_log_path=Path("data/audit.log"))
+    try:
+        orchestrator, config = _build_orchestrator(args.config)
+        memory, provider, memory_error = orchestrator.memory, orchestrator.provider, None
+    except MemoryError_ as exc:
+        # A corrupt/unreadable memory DB must still yield a diagnostic report
+        # (CRITICAL memory_store) rather than only an error message.
+        config = load_config(args.config)
+        configure_logging(config.log_level, audit_log_path="data/audit.log")
+        provider = build_provider(config.model, config.identity.allow_external_providers)
+        memory, memory_error = None, str(exc)
+    report = run_diagnostics(config, memory, provider,
+                             audit_log_path=Path("data/audit.log"),
+                             memory_store_error=memory_error)
     if args.json:
         print(json.dumps(report.as_dict(), indent=2))
     else:

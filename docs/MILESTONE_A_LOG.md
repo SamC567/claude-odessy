@@ -384,3 +384,11 @@ Append-only log of scheduled-run changes.
 - Suite: 95 passed (baseline 94, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: no behaviour change on healthy DBs; reversible.
+
+## 2026-11-10 — F073 health CLI survives a corrupt memory DB
+- Gap: `odysseus.cli health` built the MemoryStore up front, so a corrupt DB aborted with `error: ...` and no report — diagnostics failed exactly when needed.
+- Fix: `cmd_health` catches `MemoryError_`, still builds config/provider, and `run_diagnostics(memory_store=None, memory_store_error=...)` emits a CRITICAL `memory_store` check alongside all other checks (exit 1).
+- Test: `test_cli_health_reports_corrupt_memory_db_instead_of_erroring` (fails without the change, verified via stash).
+- Suite: 96 passed (baseline 95, python3.13).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: exit code 1 (CRITICAL) retained; signature change is backwards compatible (new optional kwarg); reversible.

@@ -89,3 +89,13 @@ def test_cli_health_measures_disk_at_memory_db_directory(tmp_path, capsys):
     rc = main(["--config", str(config_path), "health"])
     assert rc == 0
     assert f"used at {tmp_path}" in capsys.readouterr().out
+
+
+def test_cli_health_reports_corrupt_memory_db_instead_of_erroring(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    (tmp_path / "mem.sqlite3").write_bytes(b"this is not a sqlite database" * 200)
+    rc = main(["--config", str(config_path), "health"])
+    out = capsys.readouterr().out
+    assert rc == 1  # CRITICAL overall
+    assert "memory_store: critical" in out
+    assert "python_version" in out  # the rest of the report is still produced
