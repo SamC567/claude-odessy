@@ -328,3 +328,11 @@ Append-only log of scheduled-run changes.
 - Suite: 88 passed (baseline 87, python3.12/3.13 env).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: ReviewInboxError (same as blank reviewer); reversible.
+
+## 2026-11-10 — F009 MemoryEntry validates content/source type
+- Gap: `MemoryEntry(content=None|5, ...)` or non-string source raised an obscure `AttributeError` from `.strip()`.
+- Fix: `__post_init__` raises `ValueError` unless both are `str`.
+- Test: `test_memory_entry_rejects_non_string_content_and_source` (fails without the change, verified via stash).
+- Suite: 89 passed (baseline 88, python3.12).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: ValueError, consistent with other field checks; reversible.

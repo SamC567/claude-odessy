@@ -42,6 +42,9 @@ class MemoryEntry:
     reviewer: str | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.content, str) or not isinstance(self.source, str):
+            # A non-string would raise an obscure AttributeError on .strip().
+            raise ValueError("MemoryEntry.content and MemoryEntry.source must be strings")
         if not self.content or not self.content.strip():
             raise ValueError("MemoryEntry.content must not be empty")
         if not self.source or not self.source.strip():

@@ -234,6 +234,14 @@ def test_memory_entry_rejects_non_numeric_confidence():
             MemoryEntry(content="x", source="s", confidence=bad)
 
 
+def test_memory_entry_rejects_non_string_content_and_source():
+    for bad in (None, 5, b"x"):
+        with pytest.raises(ValueError, match="must be strings"):
+            MemoryEntry(content=bad, source="s", confidence=0.5)
+        with pytest.raises(ValueError, match="must be strings"):
+            MemoryEntry(content="x", source=bad, confidence=0.5)
+
+
 def test_memory_entry_rejects_bad_tags():
     with pytest.raises(ValueError):
         MemoryEntry(content="x", source="s", confidence=0.5, tags="food")

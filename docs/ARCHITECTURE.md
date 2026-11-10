@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- `MemoryEntry` (F009) rejects non-string `content`/`source` with `ValueError` (previously an obscure `AttributeError` from `.strip()`).
+
 - Review decisions (F009) reject a non-string reviewer with `ReviewInboxError` (previously an obscure `AttributeError`).
 
 - `MemoryStore.query` (F009) raises a clear `TypeError` for non-string text or a non-int limit (previously obscure `AttributeError`/comparison errors).
