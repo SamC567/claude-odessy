@@ -117,3 +117,41 @@ def test_cli_chat_memory_only_degradation_does_not_claim_provider_fallback(
     err = capsys.readouterr().err
     assert "memory unavailable" in err
     assert "fell back" not in err
+
+
+def test_cli_survives_unusable_audit_log_location(tmp_path, capsys, monkeypatch):
+    """A file where the ``data`` directory should be must not crash every command."""
+    import logging
+
+    from odysseus.logging_setup import AUDIT_LOGGER_NAME
+
+    config_path = _write_config(tmp_path)
+    workdir = tmp_path / "cwd"
+    workdir.mkdir()
+    (workdir / "data").write_text("not a directory")  # blocks data/audit.log
+    monkeypatch.chdir(workdir)
+
+    records: list[logging.LogRecord] = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    collector = _Collect()
+    logging.getLogger("odysseus").addHandler(collector)
+    try:
+        rc = main(["--config", str(config_path), "health"])
+        assert rc == 0  # audit_log is a WARNING, not a crash
+        out = capsys.readouterr().out
+        assert "audit_log: warning" in out
+
+        # The degradation is announced, and the audit trail still goes somewhere.
+        assert any(
+            r.levelno == logging.WARNING and "NOT persisted" in r.getMessage() for r in records
+        )
+        handlers = logging.getLogger(AUDIT_LOGGER_NAME).handlers
+        assert handlers and not any(isinstance(h, logging.FileHandler) for h in handlers)
+
+        assert main(["--config", str(config_path), "chat", "hello"]) == 0
+    finally:
+        logging.getLogger("odysseus").removeHandler(collector)

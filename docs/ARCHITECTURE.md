@@ -98,6 +98,8 @@ odysseus/
 
 ## Recent fixes
 
+- `configure_logging` (F001/F073) no longer raises when the audit log location is unusable (a file where the `data` directory should be, unwritable directory/file): audit records fall back to stderr and a WARNING says they are not persisted. Previously every CLI command, including `health` — whose `audit_log` check exists to report exactly this — died with an `OSError` traceback. Audit records are **not durable** in that state. Windows ACL behaviour untested here.
+
 - `MemoryStore.query` (F009) orders results by how many distinct query terms an entry matches before confidence/recency; previously ordering was confidence-only, so with the orchestrator's limit of 3 a high-confidence entry sharing one common word ("the") could push the relevant entry out of the context.
 
 - `OllamaProvider.health_check` (F003/F073) treats `"models": null` from `/api/tags` as "no models installed" (unhealthy, diagnostics WARNING) and a non-list `models` value as an unreadable list; previously either raised `TypeError` out of `health_check`, which must not raise, and diagnostics reported a crashed check (CRITICAL). Tested against a simulated server only.

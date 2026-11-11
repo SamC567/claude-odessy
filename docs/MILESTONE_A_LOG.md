@@ -426,3 +426,14 @@ Append-only log of scheduled-run changes.
 - Not done: stop-words, term weighting, stemming, FTS5 — the keyword/substring limitation in ARCHITECTURE.md is narrowed, not closed.
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: every pattern (including the whole-text one) counts 1, no extra weight for a whole-text match — the simplest rule that is easy to reason about and to replace with FTS5 later; reversible.
+
+## 2026-11-11 — F001/F073 unusable audit log location no longer crashes every command
+- Gap: `configure_logging` let `OSError` escape when `data/audit.log` could not be created or opened (reproduced: a regular file named `data` in the working directory -> `FileExistsError` traceback from `python -m odysseus.cli health`). Every CLI command failed, including `health`, whose `audit_log` check is meant to report this condition as a WARNING.
+- Fix: `configure_logging` catches `OSError` from creating the directory / opening the file, attaches a stderr handler to the audit logger instead, and logs a WARNING on the `odysseus` logger that audit records are not persisted. No signature change.
+- Test: `test_cli_survives_unusable_audit_log_location` (fails without the change, verified via stash).
+- Suite: 103 passed (baseline 102, python3.12 venv outside the repo).
+- Not verified: Windows permission/ACL failures (only the file-in-place-of-directory case is exercised; other `OSError`s take the same code path).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+
+### Decisions
+- Degrade to stderr (fail open) rather than refuse to run without a durable audit trail (fail closed). Reason: `check_audit_log` already classifies this state as WARNING, not CRITICAL, and the architecture rule is "every module degrades, not crashes"; diagnostics must be runnable to show the problem. Cost: in this state autonomous actions (memory writes, review decisions) proceed with audit records on stderr only. If you would rather block state-changing commands (`memory remember/approve/reject/forget`) when the audit log is not durable, say so — that is a small follow-up and this change is easily reverted.
