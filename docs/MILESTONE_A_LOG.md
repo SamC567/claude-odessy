@@ -408,3 +408,12 @@ Append-only log of scheduled-run changes.
 - Suite: 100 passed (baseline 98, python3.12 venv outside the repo).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: explicit allow-list of top-level scalars rather than accepting any single-segment name (a stray `ODYSSEUS_MODEL=x` must not replace a whole section); an invalid value is a `ConfigError`, same as in YAML; reversible.
+
+## 2026-11-11 — F003/F073 Ollama health check survives a null/malformed model list
+- Gap: `OllamaProvider.health_check` iterated `resp.json().get("models", [])` directly, so `{"models": null}` (a server with nothing installed) or a non-list value raised `TypeError` out of a method whose contract is "without raising"; diagnostics then showed a crashed check (CRITICAL) instead of the real state.
+- Fix: null is treated as an empty list ("model not installed", unhealthy); a non-list `models` is "model list unreadable" (reachable, same as unparseable JSON); entries whose `name` is not a string are skipped.
+- Test: `test_ollama_health_check_handles_null_or_malformed_model_list` (fails without the change, verified via stash).
+- Suite: 101 passed (baseline 100, python3.12 venv outside the repo).
+- Not verified: whether a given real Ollama version actually sends `"models": null`; simulated server only, as for the rest of `OllamaProvider`.
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: a non-list `models` reports reachable/"unreadable" rather than "model missing", matching the existing policy for an unparseable body (do not claim a model is missing without evidence); reversible.

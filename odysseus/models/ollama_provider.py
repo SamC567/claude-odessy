@@ -98,8 +98,14 @@ class OllamaProvider(ModelProvider):
         except requests.exceptions.RequestException as exc:
             return False, f"Ollama server unreachable at {self.base_url}: {exc}"
         try:
-            models = resp.json().get("models", [])
-            names = {m.get("name", "") for m in models if isinstance(m, dict)}
+            # ``"models": null`` is what some Ollama versions send when nothing
+            # is installed: that is an empty list, not an unreadable one.
+            models = resp.json().get("models") or []
+            if not isinstance(models, list):
+                raise ValueError("'models' is not a list")
+            names = {
+                m["name"] for m in models if isinstance(m, dict) and isinstance(m.get("name"), str)
+            }
         except (ValueError, AttributeError):
             # Reachable but unparseable /api/tags: don't claim the model is missing.
             return True, f"Ollama server reachable at {self.base_url} (model list unreadable)"

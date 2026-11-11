@@ -157,3 +157,25 @@ def test_ollama_health_check_timeout_override():
     provider.health_check()
     provider.health_check(timeout_seconds=1.5)
     assert seen == [10.0, 1.5]
+
+
+def test_ollama_health_check_handles_null_or_malformed_model_list():
+    # A server with nothing installed may answer {"models": null}; that must be
+    # "model not installed", not an exception escaping health_check.
+    empty = _FakeResponse({"models": None})
+    healthy, detail = OllamaProvider(
+        model_name="llama3", session=_FakeSession(get_result=empty)
+    ).health_check()
+    assert not healthy
+    assert "not installed" in detail and "installed: none" in detail
+
+    # A models value that is not a list is unreadable, never a crash.
+    for bad in (7, "llama3", {"name": "llama3"}):
+        healthy, detail = OllamaProvider(
+            model_name="llama3", session=_FakeSession(get_result=_FakeResponse({"models": bad}))
+        ).health_check()
+        assert healthy and "model list unreadable" in detail
+
+    # Entries with a non-string name are skipped rather than crashing.
+    odd = _FakeResponse({"models": [{"name": None}, {"name": ["x"]}, {"name": "llama3:latest"}]})
+    assert OllamaProvider(model_name="llama3", session=_FakeSession(get_result=odd)).health_check()[0]
