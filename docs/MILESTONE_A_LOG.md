@@ -437,3 +437,11 @@ Append-only log of scheduled-run changes.
 
 ### Decisions
 - Degrade to stderr (fail open) rather than refuse to run without a durable audit trail (fail closed). Reason: `check_audit_log` already classifies this state as WARNING, not CRITICAL, and the architecture rule is "every module degrades, not crashes"; diagnostics must be runnable to show the problem. Cost: in this state autonomous actions (memory writes, review decisions) proceed with audit records on stderr only. If you would rather block state-changing commands (`memory remember/approve/reject/forget`) when the audit log is not durable, say so — that is a small follow-up and this change is easily reverted.
+
+## 2026-11-11 — F001 `chat` CLI rejects a blank prompt cleanly
+- Gap: `python -m odysseus.cli chat "   "` (or `""`) ended in a `ValueError: prompt must not be empty` traceback: `Orchestrator.respond` raises `ValueError` for a blank prompt, and `main` only translates `OdysseusError`. `memory remember` already handled its own invalid input; `chat` did not.
+- Fix: `cmd_chat` catches `ValueError` from `respond`, prints `error: ...` to stderr and returns exit code 2. No change to `Orchestrator` or to any interface.
+- Test: `test_cli_chat_rejects_blank_prompt_cleanly` (fails without the change, verified via stash).
+- Suite: 104 passed (baseline 103, python3.12 venv outside the repo).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: handled in the CLI rather than making `respond` raise an `OdysseusError` subclass — changing the exception type would be an interface change for existing callers; reversible.

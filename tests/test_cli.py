@@ -155,3 +155,13 @@ def test_cli_survives_unusable_audit_log_location(tmp_path, capsys, monkeypatch)
         assert main(["--config", str(config_path), "chat", "hello"]) == 0
     finally:
         logging.getLogger("odysseus").removeHandler(collector)
+
+
+def test_cli_chat_rejects_blank_prompt_cleanly(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    for prompt in ("", "   "):
+        rc = main(["--config", str(config_path), "chat", prompt])
+        captured = capsys.readouterr()
+        assert rc == 2
+        assert "error: prompt must not be empty" in captured.err
+        assert "Jarvis:" not in captured.out

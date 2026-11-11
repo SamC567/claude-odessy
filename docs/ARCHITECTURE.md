@@ -98,6 +98,8 @@ odysseus/
 
 ## Recent fixes
 
+- `chat` CLI (F001) reports an empty or whitespace-only prompt as `error: prompt must not be empty` with exit code 2 instead of a `ValueError` traceback (same convention as `memory remember`).
+
 - `configure_logging` (F001/F073) no longer raises when the audit log location is unusable (a file where the `data` directory should be, unwritable directory/file): audit records fall back to stderr and a WARNING says they are not persisted. Previously every CLI command, including `health` — whose `audit_log` check exists to report exactly this — died with an `OSError` traceback. Audit records are **not durable** in that state. Windows ACL behaviour untested here.
 
 - `MemoryStore.query` (F009) orders results by how many distinct query terms an entry matches before confidence/recency; previously ordering was confidence-only, so with the orchestrator's limit of 3 a high-confidence entry sharing one common word ("the") could push the relevant entry out of the context.

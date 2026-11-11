@@ -40,7 +40,13 @@ def _build_orchestrator(config_path: str | None) -> tuple[Orchestrator, object]:
 
 def cmd_chat(args: argparse.Namespace) -> int:
     orchestrator, _ = _build_orchestrator(args.config)
-    result = orchestrator.respond(args.prompt)
+    try:
+        result = orchestrator.respond(args.prompt)
+    except ValueError as exc:
+        # Invalid user input (empty/blank prompt): report cleanly instead of
+        # a traceback, same convention as ``memory remember``.
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     print(f"{orchestrator.identity.name}: {result.text}")
     if result.degraded:
         # Only claim a provider fallback when one happened; a memory-only
