@@ -548,3 +548,18 @@ Append-only log of scheduled-run changes.
 - Behaviour change to which memories reach the prompt, made without asking: fewer (unrelated) entries are injected, none that matched a topical word are lost. Reason: injecting unrelated personal facts into prompts is the less safe default. Reversible by reverting this commit; veto if the old behaviour is wanted.
 - Left "will", "can", "may" and similar out of the list (also names/nouns), and kept the list hardcoded rather than adding a config key; reversible.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-11 — F009 retrieval searches tags as well as content
+
+- Gap: noted as "not done" in three earlier entries ("Tags are still not searched"). `memory remember --tags` stored tags and `memory show` displayed them, but `MemoryStore.query` matched content only, so tagging an entry had no effect on retrieval: an entry "Peanuts must be avoided" tagged `allergy` was not found by "any allergy?" and never reached the model prompt.
+- Fix: `query` matches each term against the content plus the decoded tags (new module helper `_searchable_text`, registered as the SQL function `searchable(content, tags)`, replacing the internal `fold`). Same rules as for content: case-insensitive including non-ASCII, substring, stop words ignored, approved-only. A term present in both content and a tag counts once, so ranking by distinct matched terms is unchanged. A unit-separator between the fields stops a phrase matching across the content/tag boundary. No change to the `MemoryStore` interface, schema, config or CLI.
+- Test: `test_query_matches_tags_as_well_as_content` and `test_query_survives_unreadable_tags_on_a_non_matching_row` (tests/test_memory.py). Both fail without the change (verified via stash: 2 failed, 131 passed). Also run once by hand through the CLI in a scratch directory (remember with `--tags allergy`, approve, `chat "any allergy?"` printed `(memory used: [1] source=user-note)`), echo fallback only — no live model.
+- Suite: 133 passed (baseline 131, python3.12 venv outside the repo, cloud sandbox).
+- Not done: tag matches are not weighted above content matches; no tag-only filter ("list everything tagged X") in the store or CLI; substring matching applies to tags too ("cat" matches the tag "category"). Nothing was run against an existing real database or on Windows.
+- Remaining gaps: F073 unchanged (no services beyond model providers, memory store and audit log are defined in Milestone A). F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- Behaviour change to which memories reach the prompt, made without asking: approved entries are now also retrieved by their tags, so more entries can be injected than before (the opposite direction from the stop-word change). Reason: tags are entered by the user precisely to file an entry under a word, only approved entries are affected, and the orchestrator's limit of 3 still applies. Reversible by reverting this commit; veto if tags should stay display-only.
+- An unreadable (non-JSON) tags value on a row is ignored for matching rather than failing every query; the row still raises `MemoryError_` when it is returned (existing behaviour). Reversible.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.

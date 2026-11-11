@@ -85,8 +85,10 @@ odysseus/
   distinct query terms matched (then confidence, then recency). A small
   built-in English stop-word list (`_STOP_WORDS` in `memory/store.py`)
   keeps words like "the"/"what" from acting as search terms; it is
-  English-only and not configurable. There is still no term weighting or
-  stemming, and a word matches as a substring ("cat" matches "category").
+  English-only and not configurable. An entry's tags are searched as
+  well as its content. There is still no term weighting or
+  stemming, and a word matches as a substring ("cat" matches "category",
+  in content and in tags alike).
 - **No automatic fact-extraction from conversation.** `remember()` is
   invoked explicitly (CLI or future caller); nothing in Milestone A
   parses model output into candidate memories on its own. Doing that
@@ -99,6 +101,8 @@ odysseus/
   Ollama process. Verify this first against a real local install.
 
 ## Recent fixes
+
+- `MemoryStore.query` (F009) searches an entry's tags as well as its content: an approved entry tagged `allergy` is retrieved by "any allergy?" even when its content never uses the word. Previously tags were stored and displayed (`memory show`) but ignored by retrieval, so tagging a memory had no effect on what reached the model prompt. Matching follows the content rules (case-insensitive including non-ASCII, substring, stop words ignored, approved-only); a term found in both content and a tag counts once for ranking, and a phrase cannot match across the content/tag boundary or across two tags. No interface, schema or config change; the internal SQL helper `fold` was replaced by `searchable(content, tags)`. A row whose stored tags are not valid JSON is matched on content alone and, as before, raises `MemoryError_` only if it is actually returned. Tag matches are not weighted differently from content matches, and there is no tag-only filter (e.g. "everything tagged X") in the store or CLI.
 
 - `MemoryStore.query` (F009) no longer uses English stop words ("the", "what", "with", ... — `_STOP_WORDS`, about 55 words of three or more letters) as search terms. Previously almost any question matched every approved entry containing "the" or "what", so with fewer relevant entries than the orchestrator's limit of 3, unrelated memories were injected into the model prompt (and shown as `memory used`). The whole query text is still matched as a substring, so `query("the")` and phrases such as "the umbrella" behave as before; a query made only of stop words and words under three letters now returns nothing unless the whole text matches. English only; words that are also common names or nouns ("will", "can", "may") are deliberately not in the list.
 

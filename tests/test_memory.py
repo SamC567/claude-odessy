@@ -374,3 +374,57 @@ def test_query_ignores_stop_words_as_search_terms(memory_store: MemoryStore):
     # phrase containing one keeps working.
     assert unrelated.id in [e.id for e in memory_store.query("the")]
     assert [e.id for e in memory_store.query("the umbrella")] == [unrelated.id]
+
+
+def test_query_matches_tags_as_well_as_content(memory_store: MemoryStore):
+    """A tag is a search term: an entry filed under "allergy" is retrieved by
+    that word even though its content never says it (F009 retrieval)."""
+
+    def approved(content, tags=(), confidence=0.5):
+        e = memory_store.submit_candidate(
+            MemoryEntry(content=content, source="user", confidence=confidence, tags=tags)
+        )
+        return memory_store.approve(e.id, reviewer="sam")
+
+    tagged = approved("Peanuts must be avoided", tags=("Allergy", "caf\u00e9"))
+    both = approved("Shellfish allergy noted in 2020", tags=("allergy",), confidence=0.1)
+    approved("Unrelated note about trains", tags=("travel",))
+    pending = memory_store.submit_candidate(
+        MemoryEntry(content="Pending fact", source="user", confidence=0.9, tags=("allergy",))
+    )
+
+    # Tag-only match, case-insensitive; pending entries stay invisible.
+    found = memory_store.query("any allergy?")
+    assert {e.id for e in found} == {tagged.id, both.id}
+    assert pending.id not in {e.id for e in found}
+    # Non-ASCII tags match as typed (not as their JSON escape), folded.
+    assert [e.id for e in memory_store.query("CAF\u00c9")] == [tagged.id]
+    # A term found in both content and tag still counts once: ranking by
+    # distinct matched terms is unchanged, so "peanuts allergy" puts the
+    # entry matching both terms ahead of the one matching only "allergy".
+    assert [e.id for e in memory_store.query("peanuts allergy")] == [tagged.id, both.id]
+    # The JSON punctuation of the stored tags is not searchable.
+    assert memory_store.query('", "') == []
+    assert memory_store.query("zzz") == []
+
+
+def test_query_survives_unreadable_tags_on_a_non_matching_row(memory_store: MemoryStore):
+    """A row whose stored tags are not valid JSON must not break searches that
+    do not return it; matching it by content still reports the corrupt row."""
+    import sqlite3
+
+    from odysseus.exceptions import MemoryError_
+
+    good = memory_store.submit_candidate(
+        MemoryEntry(content="Likes pizza", source="user", confidence=0.5, tags=("food",))
+    )
+    bad = memory_store.submit_candidate(
+        MemoryEntry(content="Owns a bicycle", source="user", confidence=0.5)
+    )
+    memory_store.approve(good.id, reviewer="sam")
+    memory_store.approve(bad.id, reviewer="sam")
+    with sqlite3.connect(memory_store.db_path) as conn:
+        conn.execute("UPDATE memory_entries SET tags = 'not json' WHERE id = ?", (bad.id,))
+    assert [e.id for e in memory_store.query("food")] == [good.id]
+    with pytest.raises(MemoryError_):
+        memory_store.query("bicycle")

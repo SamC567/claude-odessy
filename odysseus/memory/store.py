@@ -65,6 +65,31 @@ def _escape_like(term: str) -> str:
     return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+# Separates content and tags in the text a query is matched against, so a
+# phrase cannot match across the boundary between them (ASCII unit separator).
+_FIELD_SEP = "\x1f"
+
+
+def _searchable_text(content: str | None, tags_json: str | None) -> str:
+    """Case-folded text ``query`` matches against: the content plus the tags.
+
+    Registered as the SQL function ``searchable``. Tags are decoded from
+    their stored JSON so a tag matches as the text the user typed (the raw
+    JSON escapes non-ASCII characters). It must not raise: an unreadable
+    tags value simply contributes nothing, and the row is then judged on
+    its content alone (``_row_to_entry`` still reports it as corrupt if it
+    is returned).
+    """
+    parts = [content or ""]
+    try:
+        tags = json.loads(tags_json) if tags_json else []
+    except (ValueError, TypeError):
+        tags = []
+    if isinstance(tags, list):
+        parts.extend(t for t in tags if isinstance(t, str))
+    return _FIELD_SEP.join(parts).casefold()
+
+
 def _row_to_entry(row: sqlite3.Row) -> MemoryEntry:
     try:
         return MemoryEntry(
@@ -252,10 +277,10 @@ class MemoryStore:
     def query(self, text: str, limit: int = 20) -> list[MemoryEntry]:
         """Simple keyword search over APPROVED memory only.
 
-        Matches entries whose content contains any "significant" word
+        Matches entries whose content or tags contain any "significant" word
         (length >= 3 and not an English stop word such as "the"/"what",
         see ``_STOP_WORDS``) from ``text``, OR the whole ``text`` as a
-        substring. Results are ordered by how many distinct query terms
+        substring (of the content or of a single tag). Results are ordered by how many distinct query terms
         they match, then confidence, then recency. This is a deliberately
         simple retrieval strategy --
         good enough for Milestone A's "structured storage and
@@ -291,8 +316,10 @@ class MemoryStore:
         patterns = {text} | set(distinct_words)
         # Unicode-aware case-insensitive match: SQLite's built-in LIKE only
         # folds ASCII, so fold both sides with str.casefold() (same rule the
-        # duplicate check uses).
-        match = "fold(content) LIKE ? ESCAPE '\\'"
+        # duplicate check uses). Tags are searched too, so an entry filed
+        # under a tag is found by that word even when its content does not
+        # repeat it.
+        match = "searchable(content, tags) LIKE ? ESCAPE '\\'"
         clauses = " OR ".join([match] * len(patterns))
         # Relevance first: an entry matching more of the query's distinct
         # terms outranks one matching fewer, so a high-confidence entry that
@@ -307,7 +334,7 @@ class MemoryStore:
             f"ORDER BY {relevance} DESC, confidence DESC, created_at DESC LIMIT ?",
             params,
             setup=lambda conn: conn.create_function(
-                "fold", 1, lambda v: v.casefold() if v else v, deterministic=True
+                "searchable", 2, _searchable_text, deterministic=True
             ),
         )
         return [_row_to_entry(r) for r in rows]
