@@ -44,6 +44,22 @@ _PUNCT = ".,;:!?\"'()[]{}<>"
 _MAX_QUERY_TERMS = 50
 
 
+# English function words that say nothing about a query's topic. Without this,
+# almost any question ("What is the capital of France?") matched every approved
+# entry containing "the" or "what", so unrelated memories were injected into
+# the model prompt. Deliberately small and conservative: only words of three or
+# more letters (shorter ones are already ignored) and no word that is commonly
+# also a name or noun ("will", "can", "may"). English only.
+_STOP_WORDS = frozenset(
+    """
+    the and but for nor not are was were been being has have had does did
+    what which who whom whose when where why how this that these those
+    with from into about than then there here you your yours she her hers
+    him his its our ours they them their theirs any some
+    """.split()
+)
+
+
 def _escape_like(term: str) -> str:
     """Escape SQL LIKE wildcards so user text is matched literally."""
     return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -237,7 +253,8 @@ class MemoryStore:
         """Simple keyword search over APPROVED memory only.
 
         Matches entries whose content contains any "significant" word
-        (length >= 3) from ``text``, OR the whole ``text`` as a
+        (length >= 3 and not an English stop word such as "the"/"what",
+        see ``_STOP_WORDS``) from ``text``, OR the whole ``text`` as a
         substring. Results are ordered by how many distinct query terms
         they match, then confidence, then recency. This is a deliberately
         simple retrieval strategy --
@@ -258,7 +275,14 @@ class MemoryStore:
             # negative LIMIT means "no limit" in SQLite.
             return []
         # Strip surrounding punctuation so "pizza?" matches "pizza".
-        words = [w for w in (t.strip(_PUNCT) for t in text.split()) if len(w) >= 3]
+        # Stop words are not search terms on their own; the whole text is
+        # still matched below, so a query that *is* a stop word ("the") or a
+        # phrase containing one ("the umbrella") keeps working.
+        words = [
+            w
+            for w in (t.strip(_PUNCT) for t in text.split())
+            if len(w) >= 3 and w.casefold() not in _STOP_WORDS
+        ]
         # Bound the OR-chain: SQLite rejects expression trees deeper than 1000,
         # so an unbounded query (e.g. a pasted document) would raise a raw
         # sqlite3.OperationalError. Keep the whole text plus the first

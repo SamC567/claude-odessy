@@ -316,7 +316,7 @@ def test_query_ranks_entries_matching_more_terms_first(memory_store: MemoryStore
         return memory_store.approve(entry.id, reviewer="tester")
 
     for i in range(3):
-        approved(f"Remember the umbrella number {i}", 0.95)
+        approved(f"Remember the capital letters rule {i}", 0.95)
     relevant = approved("The capital of France is Paris", 0.4)
 
     results = memory_store.query("What is the capital of France?", limit=3)
@@ -352,3 +352,25 @@ def test_list_rejected_shows_rejected_and_retracted_with_reviewer(memory_store: 
         (withdrawn.id, "bob"),
     ]
     assert all(e.status == MemoryStatus.REJECTED and e.reviewed_at for e in rejected)
+
+
+def test_query_ignores_stop_words_as_search_terms(memory_store: MemoryStore):
+    # "what"/"the" in a question must not pull in unrelated memories that
+    # merely contain those words (they would be injected into the prompt).
+    def approved(content: str) -> MemoryEntry:
+        entry = memory_store.submit_candidate(
+            MemoryEntry(content=content, source="user", confidence=0.9)
+        )
+        return memory_store.approve(entry.id, reviewer="tester")
+
+    unrelated = approved("Remember the umbrella, whatever the weather")
+    relevant = approved("The capital of France is Paris")
+
+    results = memory_store.query("What is THE capital of France?")
+    assert [e.id for e in results] == [relevant.id]
+    # A question made only of stop words/short words matches nothing by term.
+    assert memory_store.query("What is this about?") == []
+    # The whole text is still matched, so an explicit stop-word search or a
+    # phrase containing one keeps working.
+    assert unrelated.id in [e.id for e in memory_store.query("the")]
+    assert [e.id for e in memory_store.query("the umbrella")] == [unrelated.id]

@@ -533,3 +533,18 @@ Append-only log of scheduled-run changes.
 - Both-unhealthy is CRITICAL (so `health` exits 1). Reason: with neither provider able to answer, `chat` cannot work at all, which is a different state from "optional model down, fallback fine" (WARNING). Unreachable with the built-in echo fallback; reversible by reverting this commit.
 - Separate name prefix `fallback_provider:` rather than a second `model_provider:` entry: in the default config both are `echo`, and two checks with the same name would be ambiguous for anything keying on names; reversible.
 - Still awaiting the user's choice from the previous entry: relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-11 — F009 retrieval ignores stop words as search terms
+
+- Gap: listed limitation "no stop-word list". `MemoryStore.query` used every word of three or more letters as a substring term, so a question such as "What is the capital of France?" matched every approved entry containing "the" or "what". Ranking (earlier run) put the relevant entry first, but whenever fewer relevant entries existed than the orchestrator's limit of 3, the remaining slots were filled with unrelated memories, which were then injected into the model prompt and reported as `memory used`.
+- Fix: a small built-in English stop-word list (`_STOP_WORDS`, `odysseus/memory/store.py`); those words are dropped from the per-word terms (case-insensitive). The whole query text is still matched as a substring, so `query("the")` and phrases containing a stop word are unchanged. No interface, schema or config change.
+- Test: `test_query_ignores_stop_words_as_search_terms` (fails without the change, verified via stash: 1 failed, 130 passed). The fixture of the existing `test_query_ranks_entries_matching_more_terms_first` was changed: its three high-confidence distractors shared only the word "the" with the query and are, by design, no longer returned, so they now share the non-stop word "capital" instead. Its assertions are unchanged and it passes both with and without this change.
+- Suite: 131 passed (baseline 130, python3.12 venv outside the repo, cloud sandbox).
+- Not done: the list is English-only and not configurable; a query consisting only of stop words and words under three letters ("What is this about?") now returns nothing unless the whole text matches. Substring matching ("cat" matches "category"), term weighting and stemming are unchanged. Tags are still not searched.
+- Remaining F073 gap: unchanged from the previous entry (no services beyond model providers, memory store and audit log are defined in Milestone A).
+
+### Decisions
+
+- Behaviour change to which memories reach the prompt, made without asking: fewer (unrelated) entries are injected, none that matched a topical word are lost. Reason: injecting unrelated personal facts into prompts is the less safe default. Reversible by reverting this commit; veto if the old behaviour is wanted.
+- Left "will", "can", "may" and similar out of the list (also names/nouns), and kept the list hardcoded rather than adding a config key; reversible.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.

@@ -82,9 +82,11 @@ odysseus/
   It is real and tested, just simple — SQLite FTS5 is available in this
   environment (verified) and is the natural next step; swapping it in
   only touches `MemoryStore.query`. Results are ranked by the number of
-  distinct query terms matched (then confidence, then recency); there is
-  still no stop-word list, term weighting or stemming, and a word matches
-  as a substring ("the" matches "other").
+  distinct query terms matched (then confidence, then recency). A small
+  built-in English stop-word list (`_STOP_WORDS` in `memory/store.py`)
+  keeps words like "the"/"what" from acting as search terms; it is
+  English-only and not configurable. There is still no term weighting or
+  stemming, and a word matches as a substring ("cat" matches "category").
 - **No automatic fact-extraction from conversation.** `remember()` is
   invoked explicitly (CLI or future caller); nothing in Milestone A
   parses model output into candidate memories on its own. Doing that
@@ -97,6 +99,8 @@ odysseus/
   Ollama process. Verify this first against a real local install.
 
 ## Recent fixes
+
+- `MemoryStore.query` (F009) no longer uses English stop words ("the", "what", "with", ... — `_STOP_WORDS`, about 55 words of three or more letters) as search terms. Previously almost any question matched every approved entry containing "the" or "what", so with fewer relevant entries than the orchestrator's limit of 3, unrelated memories were injected into the model prompt (and shown as `memory used`). The whole query text is still matched as a substring, so `query("the")` and phrases such as "the umbrella" behave as before; a query made only of stop words and words under three letters now returns nothing unless the whole text matches. English only; words that are also common names or nouns ("will", "can", "may") are deliberately not in the list.
 
 - `health` (F073/F003) diagnoses the fallback provider as well as the primary one: `run_diagnostics(..., fallback_provider=)` adds a `fallback_provider:<name>` check, and the CLI passes the orchestrator's fallback (the built-in `EchoProvider`). Previously only the primary provider was checked, so a report showing `model_provider:ollama: warning` gave no evidence about whether the provider `chat` degrades to could answer. An unhealthy fallback is WARNING while the primary is healthy and CRITICAL when the primary is not healthy either (no provider can answer). The check is omitted when no fallback is passed or it is the same object as the primary, so existing callers are unaffected. With the built-in echo fallback the check is always OK; the non-OK states are reachable only with a custom fallback provider and are tested with test doubles. Still open for F073: there is no check for services other than the model providers, memory store and audit log (Milestone A has no other services).
 
