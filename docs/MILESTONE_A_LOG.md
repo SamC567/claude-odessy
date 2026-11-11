@@ -445,3 +445,15 @@ Append-only log of scheduled-run changes.
 - Suite: 104 passed (baseline 103, python3.12 venv outside the repo).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: handled in the CLI rather than making `respond` raise an `OdysseusError` subclass — changing the exception type would be an interface change for existing callers; reversible.
+
+## 2026-11-11 — F003 Ollama errors carry the server's explanation
+- Gap: on an HTTP error from `/api/generate`, `OllamaProvider.generate` reported only the status line (`404 Client Error: Not Found for url ...`). Ollama puts the actual reason in a JSON body (`{"error": "model 'x' not found, try pulling it first"}`), which was discarded, so the `chat` degraded reason and the `orchestrator.provider_failed` audit record did not say why the local model was skipped.
+- Fix: `_server_error_message` reads the `error` string from the error response (never raises; ignores a missing/non-JSON/non-object body and a blank or non-string value), collapses whitespace, caps it at 200 characters, and `generate` appends it as `(server said: ...)`. Still a `ModelProviderError`; no interface change; retry behaviour unchanged.
+- Test: `test_ollama_provider_error_includes_server_explanation` (fails without the change, verified via stash), `test_ollama_provider_error_tolerates_unusable_error_body` (5 cases) and `test_ollama_provider_error_truncates_long_server_explanation` (guards).
+- Suite: 111 passed (baseline 104, python3.12 venv outside the repo).
+- Not verified: the error body shape against a live Ollama process — simulated server only, as for the rest of `OllamaProvider`.
+- Not done: HTTP 4xx responses are still retried `max_retries` times like any other request failure, although a retry cannot fix a missing model.
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+
+### Decisions
+- The server's text is included in the error (and therefore in the audit log and the `chat` stderr line) rather than only logged at DEBUG. Reason: it comes from the configured model server (loopback unless `allow_external_providers` is set), it is the only place the cause is stated, and it is length-capped. If you would rather keep third-party text out of the audit log, revert this one commit.

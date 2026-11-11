@@ -15,6 +15,25 @@ from odysseus.exceptions import ModelProviderError, ModelUnavailableError
 from odysseus.models.base import GenerationRequest, GenerationResponse, ModelProvider
 
 
+_MAX_SERVER_ERROR_CHARS = 200
+
+
+def _server_error_message(response: object) -> str | None:
+    """The ``error`` text from an Ollama error body, if there is one.
+
+    Ollama answers a failed request (e.g. a model that has not been pulled)
+    with a JSON body like ``{"error": "model 'x' not found"}``. Never raises.
+    """
+    try:
+        data = response.json()  # type: ignore[attr-defined]
+    except Exception:  # no response, no body, or not JSON
+        return None
+    message = data.get("error") if isinstance(data, dict) else None
+    if not isinstance(message, str) or not message.strip():
+        return None
+    return " ".join(message.split())[:_MAX_SERVER_ERROR_CHARS]
+
+
 class OllamaProvider(ModelProvider):
     """Provider for a local Ollama (or Ollama-API-compatible) server."""
 
@@ -47,6 +66,7 @@ class OllamaProvider(ModelProvider):
             payload["options"]["num_predict"] = request.max_tokens
 
         last_error: Exception | None = None
+        server_error: str | None = None
         for attempt in range(self.max_retries + 1):
             try:
                 resp = self._session.post(
@@ -75,8 +95,15 @@ class OllamaProvider(ModelProvider):
             except requests.exceptions.ConnectionError as exc:
                 last_error = exc
                 break  # connection refused is not worth retrying
+            except requests.exceptions.HTTPError as exc:
+                # Keep the server's own explanation: the bare status line
+                # ("404 Client Error") does not say *why* it failed.
+                last_error = exc
+                server_error = _server_error_message(getattr(exc, "response", None))
+                continue
             except requests.exceptions.RequestException as exc:
                 last_error = exc
+                server_error = None
                 continue
             except ValueError as exc:  # JSON decode error
                 last_error = exc
@@ -86,8 +113,9 @@ class OllamaProvider(ModelProvider):
             raise ModelUnavailableError(
                 f"Could not reach Ollama at {self.base_url}: {last_error}"
             ) from last_error
+        reason = f" (server said: {server_error})" if server_error else ""
         raise ModelProviderError(
-            f"Ollama request failed after {self.max_retries + 1} attempt(s): {last_error}"
+            f"Ollama request failed after {self.max_retries + 1} attempt(s): {last_error}{reason}"
         ) from last_error
 
     def health_check(self, timeout_seconds: float | None = None) -> tuple[bool, str]:

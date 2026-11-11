@@ -98,6 +98,8 @@ odysseus/
 
 ## Recent fixes
 
+- `OllamaProvider.generate` (F003) appends the server's own `error` text to the `ModelProviderError` for an HTTP error response, e.g. `404 Client Error ... (server said: model 'llama3' not found, try pulling it first)`; previously only the status line reached the `chat` degraded reason and the audit log, so a model that had not been pulled was indistinguishable from any other 404. The text is whitespace-collapsed and capped at 200 characters. Tested against a simulated server only.
+
 - `chat` CLI (F001) reports an empty or whitespace-only prompt as `error: prompt must not be empty` with exit code 2 instead of a `ValueError` traceback (same convention as `memory remember`).
 
 - `configure_logging` (F001/F073) no longer raises when the audit log location is unusable (a file where the `data` directory should be, unwritable directory/file): audit records fall back to stderr and a WARNING says they are not persisted. Previously every CLI command, including `health` — whose `audit_log` check exists to report exactly this — died with an `OSError` traceback. Audit records are **not durable** in that state. Windows ACL behaviour untested here.

@@ -100,6 +100,55 @@ def test_ollama_provider_non_object_json_raises_provider_error():
         provider.generate(GenerationRequest(prompt="hello"))
 
 
+class _HttpErrorResponse:
+    """A response whose status is an error, with an Ollama-style JSON body."""
+
+    def __init__(self, body, status_line="404 Client Error: Not Found"):
+        self._body = body
+        self._status_line = status_line
+
+    def raise_for_status(self):
+        raise requests.exceptions.HTTPError(self._status_line, response=self)
+
+    def json(self):
+        if isinstance(self._body, Exception):
+            raise self._body
+        return self._body
+
+
+def test_ollama_provider_error_includes_server_explanation():
+    # A model that has not been pulled: the status line alone does not say why.
+    session = _FakeSession(
+        post_result=_HttpErrorResponse({"error": "model 'llama3' not found, try pulling it first"})
+    )
+    provider = OllamaProvider(session=session, max_retries=0)
+    with pytest.raises(ModelProviderError) as excinfo:
+        provider.generate(GenerationRequest(prompt="hello"))
+    message = str(excinfo.value)
+    assert "404 Client Error" in message
+    assert "server said: model 'llama3' not found, try pulling it first" in message
+
+
+@pytest.mark.parametrize(
+    "body", [ValueError("not json"), ["error"], {"error": None}, {"error": "   "}, {}]
+)
+def test_ollama_provider_error_tolerates_unusable_error_body(body):
+    session = _FakeSession(post_result=_HttpErrorResponse(body))
+    provider = OllamaProvider(session=session, max_retries=0)
+    with pytest.raises(ModelProviderError) as excinfo:
+        provider.generate(GenerationRequest(prompt="hello"))
+    assert "404 Client Error" in str(excinfo.value)
+    assert "server said" not in str(excinfo.value)
+
+
+def test_ollama_provider_error_truncates_long_server_explanation():
+    session = _FakeSession(post_result=_HttpErrorResponse({"error": "x" * 5000}))
+    provider = OllamaProvider(session=session, max_retries=0)
+    with pytest.raises(ModelProviderError) as excinfo:
+        provider.generate(GenerationRequest(prompt="hello"))
+    assert len(str(excinfo.value)) < 400
+
+
 def test_ollama_health_check_reports_unreachable():
     session = _FakeSession(get_exc=requests.exceptions.ConnectionError("refused"))
     provider = OllamaProvider(session=session)
