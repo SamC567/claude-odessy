@@ -457,3 +457,13 @@ Append-only log of scheduled-run changes.
 
 ### Decisions
 - The server's text is included in the error (and therefore in the audit log and the `chat` stderr line) rather than only logged at DEBUG. Reason: it comes from the configured model server (loopback unless `allow_external_providers` is set), it is the only place the cause is stated, and it is length-capped. If you would rather keep third-party text out of the audit log, revert this one commit.
+
+## 2026-11-11 — F003 Ollama does not retry a permanent 4xx
+- Gap: recorded as "Not done" in the previous entry — `OllamaProvider.generate` retried every HTTP error `max_retries` times, including a 404 for a model that has not been pulled. The retries could not succeed, delayed the fallback to the echo provider by one full request per retry, and the message claimed `max_retries + 1` attempts whatever happened.
+- Fix: `_is_permanent_client_error` (never raises) classifies a response with an integer `status_code` in 400–499, other than 408 and 429, as not worth retrying; `generate` stops after that attempt. 5xx, 408, 429, timeouts, unparseable bodies and an error with no readable status keep the previous retry behaviour. The `ModelProviderError` text now carries the number of attempts actually made. Exception types, signature and config keys unchanged.
+- Test: `test_ollama_provider_does_not_retry_a_permanent_client_error` (fails without the change, verified via stash) and `test_ollama_provider_still_retries_transient_http_errors` (5 cases, guards the unchanged retry paths).
+- Suite: 117 passed (baseline 111, python3.12 venv outside the repo).
+- Not verified: status codes a live Ollama process actually returns — simulated server only, as for the rest of `OllamaProvider`.
+- Not done: no backoff/delay between retries (there was none before either); `Retry-After` on 429 is ignored.
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: 408 and 429 stay retryable and an unknown status is treated as transient — the conservative choice that changes behaviour only where a retry is known to be futile; reversible.

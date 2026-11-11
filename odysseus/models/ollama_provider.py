@@ -17,6 +17,19 @@ from odysseus.models.base import GenerationRequest, GenerationResponse, ModelPro
 
 _MAX_SERVER_ERROR_CHARS = 200
 
+# 4xx statuses that a later attempt can plausibly get past (request timeout,
+# rate limit). Every other 4xx means the request itself is wrong -- typically
+# a model that has not been pulled -- and repeating it cannot help.
+_RETRYABLE_CLIENT_STATUSES = frozenset({408, 429})
+
+
+def _is_permanent_client_error(response: object) -> bool:
+    """True for a 4xx response that is pointless to retry. Never raises."""
+    status = getattr(response, "status_code", None)
+    if not isinstance(status, int) or isinstance(status, bool):
+        return False  # unknown status: keep the previous retry behaviour
+    return 400 <= status < 500 and status not in _RETRYABLE_CLIENT_STATUSES
+
 
 def _server_error_message(response: object) -> str | None:
     """The ``error`` text from an Ollama error body, if there is one.
@@ -67,7 +80,9 @@ class OllamaProvider(ModelProvider):
 
         last_error: Exception | None = None
         server_error: str | None = None
-        for attempt in range(self.max_retries + 1):
+        attempts = 0
+        for _ in range(self.max_retries + 1):
+            attempts += 1
             try:
                 resp = self._session.post(
                     f"{self.base_url}/api/generate",
@@ -99,7 +114,10 @@ class OllamaProvider(ModelProvider):
                 # Keep the server's own explanation: the bare status line
                 # ("404 Client Error") does not say *why* it failed.
                 last_error = exc
-                server_error = _server_error_message(getattr(exc, "response", None))
+                response = getattr(exc, "response", None)
+                server_error = _server_error_message(response)
+                if _is_permanent_client_error(response):
+                    break  # e.g. 404 model not found: a retry cannot fix it
                 continue
             except requests.exceptions.RequestException as exc:
                 last_error = exc
@@ -115,7 +133,7 @@ class OllamaProvider(ModelProvider):
             ) from last_error
         reason = f" (server said: {server_error})" if server_error else ""
         raise ModelProviderError(
-            f"Ollama request failed after {self.max_retries + 1} attempt(s): {last_error}{reason}"
+            f"Ollama request failed after {attempts} attempt(s): {last_error}{reason}"
         ) from last_error
 
     def health_check(self, timeout_seconds: float | None = None) -> tuple[bool, str]:

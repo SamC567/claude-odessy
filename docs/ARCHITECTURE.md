@@ -98,6 +98,8 @@ odysseus/
 
 ## Recent fixes
 
+- `OllamaProvider.generate` (F003) no longer retries an HTTP 4xx response other than 408/429: a model that has not been pulled answers 404 on every attempt, so the previous `max_retries` extra requests only delayed the fallback. 5xx, 408, 429, timeouts and responses with no readable status are retried as before. The error now reports the attempts actually made (`after 1 attempt(s)`) rather than `max_retries + 1`. Tested against a simulated server only.
+
 - `OllamaProvider.generate` (F003) appends the server's own `error` text to the `ModelProviderError` for an HTTP error response, e.g. `404 Client Error ... (server said: model 'llama3' not found, try pulling it first)`; previously only the status line reached the `chat` degraded reason and the audit log, so a model that had not been pulled was indistinguishable from any other 404. The text is whitespace-collapsed and capped at 200 characters. Tested against a simulated server only.
 
 - `chat` CLI (F001) reports an empty or whitespace-only prompt as `error: prompt must not be empty` with exit code 2 instead of a `ValueError` traceback (same convention as `memory remember`).

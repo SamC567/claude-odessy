@@ -103,9 +103,10 @@ def test_ollama_provider_non_object_json_raises_provider_error():
 class _HttpErrorResponse:
     """A response whose status is an error, with an Ollama-style JSON body."""
 
-    def __init__(self, body, status_line="404 Client Error: Not Found"):
+    def __init__(self, body, status_line="404 Client Error: Not Found", status_code=404):
         self._body = body
         self._status_line = status_line
+        self.status_code = status_code
 
     def raise_for_status(self):
         raise requests.exceptions.HTTPError(self._status_line, response=self)
@@ -147,6 +148,38 @@ def test_ollama_provider_error_truncates_long_server_explanation():
     with pytest.raises(ModelProviderError) as excinfo:
         provider.generate(GenerationRequest(prompt="hello"))
     assert len(str(excinfo.value)) < 400
+
+
+def test_ollama_provider_does_not_retry_a_permanent_client_error():
+    # A missing model answers 404 every time: retrying only delays the fallback.
+    session = _FakeSession(post_result=_HttpErrorResponse({"error": "model 'llama3' not found"}))
+    provider = OllamaProvider(session=session, max_retries=3)
+    with pytest.raises(ModelProviderError) as excinfo:
+        provider.generate(GenerationRequest(prompt="hello"))
+    assert len(session.posted_payloads) == 1
+    assert "after 1 attempt(s)" in str(excinfo.value)
+    assert "server said: model 'llama3' not found" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "status_line, status_code",
+    [
+        ("500 Server Error: Internal Server Error", 500),
+        ("503 Server Error: Service Unavailable", 503),
+        ("429 Client Error: Too Many Requests", 429),
+        ("408 Client Error: Request Timeout", 408),
+        ("bad status", None),  # status unknown: keep retrying as before
+    ],
+)
+def test_ollama_provider_still_retries_transient_http_errors(status_line, status_code):
+    session = _FakeSession(
+        post_result=_HttpErrorResponse({}, status_line=status_line, status_code=status_code)
+    )
+    provider = OllamaProvider(session=session, max_retries=2)
+    with pytest.raises(ModelProviderError) as excinfo:
+        provider.generate(GenerationRequest(prompt="hello"))
+    assert len(session.posted_payloads) == 3  # 1 initial + 2 retries
+    assert "after 3 attempt(s)" in str(excinfo.value)
 
 
 def test_ollama_health_check_reports_unreachable():
