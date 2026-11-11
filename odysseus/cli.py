@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import unicodedata
 from pathlib import Path
 
 from odysseus.config import load_config
@@ -30,6 +31,31 @@ from odysseus.logging_setup import configure_logging
 from odysseus.memory.store import MemoryStore
 from odysseus.models.echo_provider import EchoProvider
 from odysseus.models.registry import build_provider
+
+
+# Bidirectional-text controls: invisible, and able to reorder how the rest of
+# a line is displayed (so text can read differently from what is stored).
+_BIDI_CONTROLS = frozenset("\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069")
+
+
+def _printable(value: object) -> str:
+    """Stored memory text made safe to print on one terminal line.
+
+    Review workflow (F009): a reviewer approves what the listing shows, so a
+    stored value must not be able to change the listing itself. A newline in
+    an entry could fake a second ``[id] ...`` line, and terminal escape
+    sequences or bidi overrides could hide or reorder the real text. Control
+    characters, line/paragraph separators and bidi controls are therefore
+    shown as visible backslash escapes (``\\n``, ``\\x1b``, ``\\u202e``).
+    Display only -- the stored entry is not modified.
+    """
+    out = []
+    for ch in str(value):
+        if unicodedata.category(ch) in ("Cc", "Zl", "Zp") or ch in _BIDI_CONTROLS:
+            out.append(ch.encode("unicode_escape").decode("ascii"))
+        else:
+            out.append(ch)
+    return "".join(out)
 
 
 def _build_orchestrator(config_path: str | None) -> tuple[Orchestrator, object]:
@@ -57,7 +83,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
         # answer, with the same [id] used by ``memory forget``. On stderr so
         # the answer on stdout stays unchanged.
         used = "; ".join(
-            f"[{entry_id}] source={source}" for entry_id, source in result.memory_sources
+            f"[{entry_id}] source={_printable(source)}" for entry_id, source in result.memory_sources
         )
         print(f"(memory used: {used})", file=sys.stderr)
     if result.degraded:
@@ -104,7 +130,10 @@ def cmd_memory_list_pending(args: argparse.Namespace) -> int:
         print("No pending review items.")
         return 0
     for entry in pending:
-        print(f"[{entry.id}] ({entry.confidence:.2f}, {entry.source}) {entry.content}")
+        print(
+            f"[{entry.id}] ({entry.confidence:.2f}, {_printable(entry.source)}) "
+            f"{_printable(entry.content)}"
+        )
     return 0
 
 
@@ -116,8 +145,8 @@ def cmd_memory_list_approved(args: argparse.Namespace) -> int:
         return 0
     for entry in approved:
         print(
-            f"[{entry.id}] ({entry.confidence:.2f}, {entry.source}, "
-            f"reviewer={entry.reviewer}) {entry.content}"
+            f"[{entry.id}] ({entry.confidence:.2f}, {_printable(entry.source)}, "
+            f"reviewer={_printable(entry.reviewer)}) {_printable(entry.content)}"
         )
     return 0
 
@@ -133,8 +162,9 @@ def cmd_memory_list_rejected(args: argparse.Namespace) -> int:
     for entry in rejected:
         reviewed = entry.reviewed_at.isoformat(timespec="seconds") if entry.reviewed_at else "?"
         print(
-            f"[{entry.id}] ({entry.confidence:.2f}, {entry.source}, "
-            f"reviewer={entry.reviewer}, reviewed={reviewed}) {entry.content}"
+            f"[{entry.id}] ({entry.confidence:.2f}, {_printable(entry.source)}, "
+            f"reviewer={_printable(entry.reviewer)}, reviewed={reviewed}) "
+            f"{_printable(entry.content)}"
         )
     return 0
 
@@ -151,13 +181,13 @@ def cmd_memory_show(args: argparse.Namespace) -> int:
     def _when(value) -> str:
         return value.isoformat(timespec="seconds") if value else "-"
 
-    print(f"[{entry.id}] {entry.content}")
+    print(f"[{entry.id}] {_printable(entry.content)}")
     print(f"  status:     {entry.status.value}")
-    print(f"  source:     {entry.source}")
+    print(f"  source:     {_printable(entry.source)}")
     print(f"  confidence: {entry.confidence:.2f}")
-    print(f"  tags:       {', '.join(entry.tags) if entry.tags else '-'}")
+    print(f"  tags:       {', '.join(_printable(t) for t in entry.tags) if entry.tags else '-'}")
     print(f"  created:    {_when(entry.created_at)}")
-    print(f"  reviewer:   {entry.reviewer or '-'}")
+    print(f"  reviewer:   {_printable(entry.reviewer) if entry.reviewer else '-'}")
     print(f"  reviewed:   {_when(entry.reviewed_at)}")
     return 0
 

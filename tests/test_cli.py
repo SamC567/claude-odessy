@@ -316,3 +316,62 @@ def test_cli_health_reports_the_fallback_provider(tmp_path, capsys):
     (tmp_path / "mem.sqlite3").write_bytes(b"this is not a sqlite database" * 200)
     assert main(["--config", str(config_path), "health"]) == 1
     assert "fallback_provider:echo: ok" in capsys.readouterr().out
+
+
+def test_cli_memory_listings_cannot_be_spoofed_by_control_characters(tmp_path, capsys):
+    # A stored value must not be able to forge a second "[id] ..." line or
+    # hide text with terminal escapes: the reviewer approves what is shown.
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path), "memory"]
+    content = "harmless\n[99] (0.99, user) forged entry\x1b[2K\r\u202egnp.exe"
+    main(base + ["remember", content, "--source", "web\npage", "--confidence", "0.5",
+                 "--tags", "a\tb"])
+    capsys.readouterr()
+
+    def check(out, expected_lines):
+        lines = out.splitlines()
+        assert len(lines) == expected_lines
+        for raw in ("\x1b", "\r", "\t", "\u202e"):
+            assert raw not in out
+        assert "harmless\\n[99] (0.99, user) forged entry\\x1b[2K\\r\\u202egnp.exe" in lines[0]
+        return lines
+
+    assert main(base + ["list-pending"]) == 0
+    lines = check(capsys.readouterr().out, 1)
+    assert lines[0].startswith("[1] (0.50, web\\npage) ")
+
+    assert main(base + ["show", "1"]) == 0
+    lines = check(capsys.readouterr().out, 8)
+    assert "source:     web\\npage" in lines[2]
+    assert "tags:       a\\tb" in lines[4]
+
+    main(base + ["approve", "1", "--reviewer", "al\x07ice"])
+    capsys.readouterr()
+    assert main(base + ["list-approved"]) == 0
+    lines = check(capsys.readouterr().out, 1)
+    assert "reviewer=al\\x07ice" in lines[0]
+
+    assert main(["--config", str(config_path), "chat", "harmless"]) == 0
+    err = capsys.readouterr().err
+    assert "(memory used: [1] source=web\\npage)" in err
+
+    main(base + ["forget", "1"])
+    capsys.readouterr()
+    assert main(base + ["list-rejected"]) == 0
+    check(capsys.readouterr().out, 1)
+
+    # Display only: the stored entry is unchanged.
+    from odysseus.memory.store import MemoryStore
+
+    stored = MemoryStore(tmp_path / "mem.sqlite3").get(1)
+    assert stored.content == content and stored.source == "web\npage"
+
+
+def test_cli_memory_listings_leave_ordinary_text_untouched(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path), "memory"]
+    content = "Café at C:\\Users\\sam — 日本語 👍🏽 ok"
+    main(base + ["remember", content, "--source", "user", "--confidence", "0.5"])
+    capsys.readouterr()
+    assert main(base + ["list-pending"]) == 0
+    assert capsys.readouterr().out == f"[1] (0.50, user) {content}\n"
