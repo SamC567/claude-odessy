@@ -392,3 +392,11 @@ Append-only log of scheduled-run changes.
 - Suite: 96 passed (baseline 95, python3.13).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: exit code 1 (CRITICAL) retained; signature change is backwards compatible (new optional kwarg); reversible.
+
+## 2026-11-11 — F001 chat CLI no longer misreports a memory-only degradation as a provider fallback
+- Gap: `InteractionResult.degraded` covers both memory failure and provider fallback, and `chat` printed `(degraded: fell back to <provider_used>; ...)` for either — so with memory unavailable but the primary model answering, it claimed a fallback that never happened.
+- Fix: `InteractionResult.used_fallback` (additive, default False) set only on the provider-fallback path; the CLI prints "fell back to ..." only when it is true.
+- Test: `test_used_fallback_distinguishes_provider_fallback_from_memory_degradation`, `test_cli_chat_memory_only_degradation_does_not_claim_provider_fallback` (both fail without the change, verified via stash).
+- Suite: 98 passed (baseline 96, python3.12 venv — system pip is PEP 668-managed, so deps were installed into a throwaway venv outside the repo).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: added a new field rather than changing the meaning of `degraded` (keeps existing consumers working); reversible.

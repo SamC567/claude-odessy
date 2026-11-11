@@ -113,3 +113,25 @@ def test_respond_degrades_when_memory_query_fails(identity, memory_store):
     assert result.memory_context == ()
     assert result.degraded is True
     assert "memory unavailable" in result.degraded_reason
+
+
+def test_used_fallback_distinguishes_provider_fallback_from_memory_degradation(
+    identity, memory_store
+):
+    from odysseus.exceptions import MemoryError_
+
+    fell_back = Orchestrator(identity, _AlwaysFailsProvider(), memory_store).respond("hello")
+    assert fell_back.degraded is True
+    assert fell_back.used_fallback is True
+
+    healthy = Orchestrator(identity, _CannedProvider(), memory_store).respond("hello")
+    assert healthy.used_fallback is False
+
+    def boom(*args, **kwargs):
+        raise MemoryError_("disk I/O error")
+
+    memory_store.query = boom
+    memory_only = Orchestrator(identity, _CannedProvider(), memory_store).respond("hello")
+    assert memory_only.degraded is True
+    assert memory_only.provider_used == "canned"
+    assert memory_only.used_fallback is False

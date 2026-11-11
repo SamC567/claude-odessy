@@ -36,6 +36,9 @@ class InteractionResult:
     memory_sources: tuple[tuple[int | None, str], ...] = field(default_factory=tuple)
     degraded: bool = False
     degraded_reason: str | None = None
+    # True only when the primary provider failed and the fallback answered.
+    # ``degraded`` alone does not imply this (memory may be what degraded).
+    used_fallback: bool = False
 
 
 class Orchestrator:
@@ -90,11 +93,13 @@ class Orchestrator:
 
         degraded = memory_failure is not None
         degraded_reason = memory_failure
+        used_fallback = False
         try:
             response = self.provider.generate(request)
             audit("orchestrator.generate", provider=self.provider.name, degraded=False)
         except ModelProviderError as exc:
             degraded = True
+            used_fallback = True
             degraded_reason = (
                 f"{memory_failure}; {exc}" if memory_failure else str(exc)
             )
@@ -114,6 +119,7 @@ class Orchestrator:
             memory_sources=context_sources,
             degraded=degraded,
             degraded_reason=degraded_reason,
+            used_fallback=used_fallback,
         )
 
     def remember(

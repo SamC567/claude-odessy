@@ -43,8 +43,10 @@ def cmd_chat(args: argparse.Namespace) -> int:
     result = orchestrator.respond(args.prompt)
     print(f"{orchestrator.identity.name}: {result.text}")
     if result.degraded:
-        print(f"(degraded: fell back to {result.provider_used}; {result.degraded_reason})",
-              file=sys.stderr)
+        # Only claim a provider fallback when one happened; a memory-only
+        # degradation is still answered by the primary provider.
+        prefix = f"fell back to {result.provider_used}; " if result.used_fallback else ""
+        print(f"(degraded: {prefix}{result.degraded_reason})", file=sys.stderr)
     return 0
 
 

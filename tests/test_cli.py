@@ -99,3 +99,21 @@ def test_cli_health_reports_corrupt_memory_db_instead_of_erroring(tmp_path, caps
     assert rc == 1  # CRITICAL overall
     assert "memory_store: critical" in out
     assert "python_version" in out  # the rest of the report is still produced
+
+
+def test_cli_chat_memory_only_degradation_does_not_claim_provider_fallback(
+    tmp_path, capsys, monkeypatch
+):
+    from odysseus.exceptions import MemoryError_
+    from odysseus.memory.store import MemoryStore
+
+    def boom(self, *args, **kwargs):
+        raise MemoryError_("disk I/O error")
+
+    monkeypatch.setattr(MemoryStore, "query", boom)
+    config_path = _write_config(tmp_path)
+    rc = main(["--config", str(config_path), "chat", "hello"])
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "memory unavailable" in err
+    assert "fell back" not in err
