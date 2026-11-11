@@ -98,6 +98,8 @@ odysseus/
 
 ## Recent fixes
 
+- `MemoryStore(db_path)` (F009/F073) raises `MemoryError_` when the database's directory cannot be created (a file where the directory should be, an unwritable parent); previously a raw `OSError` escaped, so every CLI command ended in a traceback and `health` produced no report. `health` now shows `memory_store` CRITICAL with the rest of the report; other commands print `error: ...` and exit 2. A caller that caught `OSError` from the constructor must catch `MemoryError_` instead (none in this repo). Windows ACL behaviour untested here.
+
 - `OllamaProvider.generate` (F003) no longer retries an HTTP 4xx response other than 408/429: a model that has not been pulled answers 404 on every attempt, so the previous `max_retries` extra requests only delayed the fallback. 5xx, 408, 429, timeouts and responses with no readable status are retried as before. The error now reports the attempts actually made (`after 1 attempt(s)`) rather than `max_retries + 1`. Tested against a simulated server only.
 
 - `OllamaProvider.generate` (F003) appends the server's own `error` text to the `ModelProviderError` for an HTTP error response, e.g. `404 Client Error ... (server said: model 'llama3' not found, try pulling it first)`; previously only the status line reached the `chat` degraded reason and the audit log, so a model that had not been pulled was indistinguishable from any other 404. The text is whitespace-collapsed and capped at 200 characters. Tested against a simulated server only.

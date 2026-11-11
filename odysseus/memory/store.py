@@ -81,7 +81,16 @@ class MemoryStore:
             # would silently auto-approve every candidate (skipping review).
             raise ValueError("auto_approve_threshold must be a number between 0.0 and 1.0")
         self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            # A file where the data directory should be, or an unwritable
+            # parent: surface it as the store's typed error (like every other
+            # storage failure) so callers can report or degrade, not crash.
+            raise MemoryError_(
+                f"Could not create memory database directory {self.db_path.parent}: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
         self.auto_approve_threshold = auto_approve_threshold
         self._init_schema()
 

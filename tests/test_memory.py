@@ -324,3 +324,13 @@ def test_query_ranks_entries_matching_more_terms_first(memory_store: MemoryStore
     assert results[0].id == relevant.id
     # Ties on relevance still fall back to confidence ordering.
     assert [e.confidence for e in results[1:]] == [0.95, 0.95]
+
+
+def test_store_raises_typed_error_when_db_directory_cannot_be_created(tmp_path):
+    """A file where the DB's directory should be is a MemoryError_, not a raw OSError."""
+    from odysseus.exceptions import MemoryError_
+
+    blocker = tmp_path / "data"
+    blocker.write_text("not a directory")
+    with pytest.raises(MemoryError_, match="Could not create memory database directory"):
+        MemoryStore(blocker / "sub" / "memory.sqlite3")

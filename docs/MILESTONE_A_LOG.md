@@ -467,3 +467,12 @@ Append-only log of scheduled-run changes.
 - Not done: no backoff/delay between retries (there was none before either); `Retry-After` on 429 is ignored.
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: 408 and 429 stay retryable and an unknown status is treated as transient — the conservative choice that changes behaviour only where a retry is known to be futile; reversible.
+
+## 2026-11-11 — F009/F073 uncreatable memory DB directory raises the typed error
+- Gap: `MemoryStore.__init__` called `db_path.parent.mkdir(...)` unguarded. With a regular file where the data directory should be (or an unwritable parent) a raw `FileExistsError`/`NotADirectoryError`/`PermissionError` escaped; `main` only translates `OdysseusError`, so every command — including `health`, which already has a CRITICAL `memory_store` path for an unopenable store — died with a traceback. The store's own docstring promises all failures are `MemoryError_`.
+- Fix: the `mkdir` is wrapped; `OSError` becomes `MemoryError_("Could not create memory database directory ...")` naming the original exception type. No signature, schema or config change.
+- Test: `test_store_raises_typed_error_when_db_directory_cannot_be_created` and `test_cli_reports_uncreatable_memory_db_directory` (both fail without the change, verified via stash).
+- Suite: 119 passed (baseline 117, python3.12 venv outside the repo).
+- Not verified: Windows permission/ACL failures (only the file-in-place-of-directory case is exercised; other `OSError`s take the same code path).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: the exception type for this failure changes from `OSError` to `MemoryError_`. Nothing in this repo caught `OSError` from the constructor and the documented contract was already `MemoryError_`, so this is treated as a bug fix rather than an interface change; reversible by reverting this commit.

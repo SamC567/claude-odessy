@@ -165,3 +165,23 @@ def test_cli_chat_rejects_blank_prompt_cleanly(tmp_path, capsys):
         assert rc == 2
         assert "error: prompt must not be empty" in captured.err
         assert "Jarvis:" not in captured.out
+
+
+def test_cli_reports_uncreatable_memory_db_directory(tmp_path, capsys):
+    """A file where the memory DB's directory should be: report it, no traceback."""
+    blocker = tmp_path / "data"
+    blocker.write_text("not a directory")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        f"memory:\n  db_path: {blocker / 'sub' / 'mem.sqlite3'}\n"
+        f"model:\n  provider: echo\n"
+    )
+    rc = main(["--config", str(config_path), "health"])
+    out = capsys.readouterr().out
+    assert rc == 1  # CRITICAL overall
+    assert "memory_store: critical" in out
+    assert "python_version" in out  # the rest of the report is still produced
+
+    rc = main(["--config", str(config_path), "chat", "hello"])
+    assert rc == 2
+    assert "error: Could not create memory database directory" in capsys.readouterr().err
