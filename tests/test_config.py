@@ -121,3 +121,22 @@ def test_model_base_url_rejects_embedded_credentials(tmp_path):
     ok = tmp_path / "ok.yaml"
     ok.write_text("model:\n  base_url: 'http://127.0.0.1:11434'\n")
     assert load_config(ok).model.base_url == "http://127.0.0.1:11434"
+
+
+def test_env_override_top_level_log_level(tmp_path, monkeypatch):
+    # config/.env.example documents ODYSSEUS_LOG_LEVEL; it must not be ignored.
+    path = tmp_path / "custom.yaml"
+    path.write_text("log_level: INFO\n")
+    monkeypatch.setenv("ODYSSEUS_LOG_LEVEL", "debug")
+    assert load_config(path).log_level == "DEBUG"
+    monkeypatch.setenv("ODYSSEUS_LOG_LEVEL", "nonsense")
+    with pytest.raises(ConfigError):
+        load_config(path)
+
+
+def test_env_single_segment_section_name_is_ignored(tmp_path, monkeypatch):
+    # ODYSSEUS_MODEL must not replace the whole model section with a string.
+    path = tmp_path / "custom.yaml"
+    path.write_text("model:\n  provider: echo\n")
+    monkeypatch.setenv("ODYSSEUS_MODEL", "ollama")
+    assert load_config(path).model.provider == "echo"

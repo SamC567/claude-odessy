@@ -41,8 +41,8 @@ python -m pytest
 ## Configuration
 
 - Defaults: `config/default.yaml` (no secrets).
-- Environment overrides: `ODYSSEUS_<SECTION>__<FIELD>=value`
-  (see `config/.env.example`).
+- Environment overrides: `ODYSSEUS_<SECTION>__<FIELD>=value`; the top-level
+  `log_level` is `ODYSSEUS_LOG_LEVEL` (see `config/.env.example`).
 - Programmatic overrides: `load_config(path, overrides={"model": {"provider": "ollama"}})`.
 
 ## Suggested integration adapters (not yet built — build only if the

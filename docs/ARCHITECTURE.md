@@ -95,6 +95,8 @@ odysseus/
 
 ## Recent fixes
 
+- Config env overrides (F001) honour `ODYSSEUS_LOG_LEVEL` for the top-level `log_level` field (documented in `config/.env.example` but previously silently ignored, since only `SECTION__FIELD` names were applied). A single-segment section name such as `ODYSSEUS_MODEL` is still ignored.
+
 - `InteractionResult.used_fallback` (F001) is true only when the primary provider failed and the fallback answered; the `chat` CLI no longer prints "fell back to <provider>" for a memory-only degradation (previously it claimed a provider fallback that had not happened).
 
 - CLI `health` (F073) still produces a full report when the memory database is corrupt/unopenable: `memory_store` is CRITICAL (exit 1) instead of the command dying with only `error: ...`. `run_diagnostics` accepts `memory_store=None` plus `memory_store_error`.

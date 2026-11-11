@@ -400,3 +400,11 @@ Append-only log of scheduled-run changes.
 - Suite: 98 passed (baseline 96, python3.12 venv — system pip is PEP 668-managed, so deps were installed into a throwaway venv outside the repo).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: added a new field rather than changing the meaning of `degraded` (keeps existing consumers working); reversible.
+
+## 2026-11-11 — F001 `ODYSSEUS_LOG_LEVEL` env override is honoured
+- Gap: `config/.env.example` documents `ODYSSEUS_LOG_LEVEL=DEBUG`, but `_apply_env_overrides` only applied `SECTION__FIELD` names, so the top-level `log_level` could not be set from the environment and the variable was silently ignored.
+- Fix: single-segment env names are applied for top-level scalar fields (`_TOP_LEVEL_SCALAR_FIELDS`, currently just `log_level`); the value goes through the existing `log_level` validation. Single-segment section names (`ODYSSEUS_MODEL`) and unknown names are still ignored.
+- Test: `test_env_override_top_level_log_level` (fails without the change, verified via stash), `test_env_single_segment_section_name_is_ignored` (guard; passes before and after).
+- Suite: 100 passed (baseline 98, python3.12 venv outside the repo).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: explicit allow-list of top-level scalars rather than accepting any single-segment name (a stray `ODYSSEUS_MODEL=x` must not replace a whole section); an invalid value is a `ConfigError`, same as in YAML; reversible.

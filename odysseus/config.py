@@ -148,6 +148,11 @@ class OdysseusConfig(BaseModel):
         return normalised
 
 
+# Top-level fields that are plain values rather than sections; these take a
+# single-segment env override (ODYSSEUS_<FIELD>) instead of SECTION__FIELD.
+_TOP_LEVEL_SCALAR_FIELDS = frozenset({"log_level"})
+
+
 def _read_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -165,12 +170,18 @@ def _apply_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
     """Apply ``ODYSSEUS_SECTION__FIELD=value`` environment overrides.
 
     Example: ``ODYSSEUS_MODEL__PROVIDER=ollama`` overrides ``model.provider``.
+    Top-level scalar fields have no section: ``ODYSSEUS_LOG_LEVEL=DEBUG``
+    overrides ``log_level``. A single-segment name that is a section (e.g.
+    ``ODYSSEUS_MODEL``) is ignored, as are unknown names.
     """
     data = dict(data)
     for key, value in os.environ.items():
         if not key.startswith(ENV_PREFIX):
             continue
         path = key[len(ENV_PREFIX) :].lower().split("__")
+        if len(path) == 1 and path[0] in _TOP_LEVEL_SCALAR_FIELDS:
+            data[path[0]] = value
+            continue
         if len(path) != 2:
             continue
         section, field = path
