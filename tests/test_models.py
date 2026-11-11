@@ -345,3 +345,76 @@ def test_ollama_leaves_a_caller_supplied_session_untouched():
     session = requests.Session()
     OllamaProvider(base_url="http://localhost:11434", session=session)
     assert session.trust_env is True
+
+
+def test_ollama_loopback_requests_do_not_follow_redirects():
+    # A 307 re-sends the POST body: whatever answers on the loopback port
+    # must not be able to forward the prompt to another host.
+    import json
+    from http.server import BaseHTTPRequestHandler
+
+    received = []
+
+    class _Target(BaseHTTPRequestHandler):
+        def _record(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            received.append(self.path + " " + self.rfile.read(length).decode("utf-8", "replace"))
+            data = json.dumps({"response": "answer from elsewhere",
+                               "models": [{"name": "llama3:latest"}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        do_GET = do_POST = _record
+
+        def log_message(self, *args):
+            pass
+
+    target, target_url = _serve(_Target)
+    asked = []
+
+    class _Redirector(BaseHTTPRequestHandler):
+        def _redirect(self):
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            asked.append(self.path)
+            self.send_response(307)
+            self.send_header("Location", target_url + self.path)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        do_GET = do_POST = _redirect
+
+        def log_message(self, *args):
+            pass
+
+    redirector, redirector_url = _serve(_Redirector)
+    try:
+        provider = OllamaProvider(base_url=redirector_url, max_retries=2, timeout_seconds=5)
+        with pytest.raises(ModelProviderError) as excinfo:
+            provider.generate(GenerationRequest(prompt="private prompt"))
+        healthy, detail = provider.health_check()
+    finally:
+        redirector.shutdown()
+        redirector.server_close()
+        target.shutdown()
+        target.server_close()
+
+    assert received == []  # nothing, prompt included, reached the redirect target
+    assert "redirect" in str(excinfo.value) and target_url in str(excinfo.value)
+    assert not isinstance(excinfo.value, ModelUnavailableError)
+    assert asked == ["/api/generate", "/api/tags"]  # one attempt each: not retried
+    assert healthy is False
+    assert "redirect" in detail and target_url in detail
+
+
+def test_ollama_redirect_policy_applies_only_to_its_own_loopback_session():
+    default_limit = requests.Session().max_redirects
+    assert OllamaProvider(base_url="http://127.0.0.1:11434")._session.max_redirects == 0
+    # An explicitly allowed remote server keeps the requests default...
+    assert OllamaProvider(base_url="http://models.example:11434")._session.max_redirects == default_limit
+    # ...and a caller-supplied session is left exactly as given.
+    session = requests.Session()
+    OllamaProvider(base_url="http://localhost:11434", session=session)
+    assert session.max_redirects == default_limit

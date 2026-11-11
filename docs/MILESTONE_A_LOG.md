@@ -606,3 +606,18 @@ Append-only log of scheduled-run changes.
 
 - Non-loopback Ollama URLs keep using environment proxies. Reason: such a URL is only reachable after the user sets `identity.allow_external_providers: true`, and a remote server may legitimately need the proxy; changing that would be a behaviour change nobody asked for. Reversible in one line; veto if all Ollama traffic should be direct.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-11 — F003 loopback Ollama requests do not follow redirects
+
+- Gap: `OllamaProvider` let `requests` follow HTTP redirects (its default, up to 30). A 307/308 response from whatever answers on the configured loopback port made the provider re-send the `/api/generate` POST, prompt and approved-memory context included, to the redirect target, which can be any host. That contradicts the module's "no prompt data leaves the machine through this provider" statement and CLAUDE.md's local-first rule, and the `identity.allow_external_providers` gate only inspects the configured `base_url`, not where a request ends up. `health_check` followed redirects too, so a server elsewhere could be reported as the healthy local one. Reproduced before the fix with two loopback servers: the redirect target received the POST body.
+- Fix: when `OllamaProvider` creates its own session for a loopback `base_url`, it sets `session.max_redirects = 0` (next to the existing `trust_env = False`); `requests` then raises `TooManyRedirects` before sending anything to the target. `generate` turns that into a `ModelProviderError` that names the target and is not retried; `health_check` returns `(False, "No Ollama server at ...: the server answered with a redirect to '...', which was not followed")`. No interface, config or schema change.
+- Test: `test_ollama_loopback_requests_do_not_follow_redirects` (two in-process loopback HTTP servers; asserts the target receives nothing, one attempt per call, error and health detail name the redirect) and `test_ollama_redirect_policy_applies_only_to_its_own_loopback_session` in tests/test_models.py. Both fail without the change (verified by stashing `odysseus/`: 2 failed, 147 passed).
+- Suite: 149 passed (baseline 147, python3.12 venv outside the repo, cloud sandbox).
+- Not done: a caller-supplied session is not altered. A non-loopback `base_url` still follows redirects. Not run on Windows. Not tested against a live Ollama (a real Ollama does not redirect these endpoints as far as I know; not verified here).
+- Remaining gaps: F073 unchanged. F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- Redirects are refused outright for a loopback server, including a redirect to another loopback address. Reason: simplest rule that cannot leak, and a local Ollama has no reason to redirect; the cost is that a local reverse proxy that redirects (e.g. http to https) now fails with a message naming the target, fixed by putting the final URL in `model.base_url`. Reversible in one line; veto if same-host redirects should be followed.
+- Non-loopback Ollama URLs keep following redirects, same reasoning as the proxy decision above (explicit opt-in via `identity.allow_external_providers`). Note this means an allowed remote server can redirect the prompt to a third host; say if that should be restricted too.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
