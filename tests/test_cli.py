@@ -185,3 +185,27 @@ def test_cli_reports_uncreatable_memory_db_directory(tmp_path, capsys):
     rc = main(["--config", str(config_path), "chat", "hello"])
     assert rc == 2
     assert "error: Could not create memory database directory" in capsys.readouterr().err
+
+
+def test_cli_chat_reports_which_memories_informed_the_answer(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path)]
+    main(base + ["memory", "remember", "Sam likes pizza", "--source", "user-note",
+                 "--confidence", "0.9"])
+    main(base + ["memory", "remember", "pizza is pending", "--source", "unreviewed",
+                 "--confidence", "0.9"])
+    main(base + ["memory", "approve", "1"])
+    capsys.readouterr()
+
+    assert main(base + ["chat", "what about pizza?"]) == 0
+    captured = capsys.readouterr()
+    assert "(memory used: [1] source=user-note)" in captured.err
+    # Unreviewed memory is never used, so it is never cited either.
+    assert "unreviewed" not in captured.err
+    assert "memory used" not in captured.out
+
+
+def test_cli_chat_cites_no_memory_when_none_was_used(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    assert main(["--config", str(config_path), "chat", "hello"]) == 0
+    assert "memory used" not in capsys.readouterr().err

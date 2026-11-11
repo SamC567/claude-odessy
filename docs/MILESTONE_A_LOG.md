@@ -476,3 +476,14 @@ Append-only log of scheduled-run changes.
 - Not verified: Windows permission/ACL failures (only the file-in-place-of-directory case is exercised; other `OSError`s take the same code path).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: the exception type for this failure changes from `OSError` to `MemoryError_`. Nothing in this repo caught `OSError` from the constructor and the documented contract was already `MemoryError_`, so this is treated as a bug fix rather than an interface change; reversible by reverting this commit.
+
+## 2026-11-11 — F009 `chat` CLI shows which memories informed the answer
+- Gap: source tracking stopped at the API. `Orchestrator.respond` returns `memory_sources` (entry id + source) and audits `orchestrator.memory_used`, but `cmd_chat` printed only the answer, so from the CLI there was no sign that approved memory had been injected into the prompt, and no way to find the id to `memory forget` when an answer was shaped by a wrong fact (short of reading `data/audit.log`).
+- Fix: `cmd_chat` prints `(memory used: [id] source=...; ...)` to stderr when `result.memory_sources` is non-empty. CLI only; no change to `Orchestrator`, `MemoryStore`, config or any interface.
+- Test: `test_cli_chat_reports_which_memories_informed_the_answer` (fails without the change, verified via stash) and `test_cli_chat_cites_no_memory_when_none_was_used` (guard: silent when no memory was used).
+- Suite: 121 passed (baseline 119, python3.12 venv outside the repo).
+- Not done: the cited line shows id and source only, not confidence or content; `source` is printed as stored (no escaping of control characters, same as `memory list-pending`).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+
+### Decisions
+- The line is always printed (no `--sources` flag) and goes to stderr. Reason: stdout — the answer — stays byte-for-byte unchanged for anything that parses it, and showing by default is the transparent choice for a privacy-first assistant. If you would rather have it opt-in or on stdout, say so; reversible by reverting this one commit.

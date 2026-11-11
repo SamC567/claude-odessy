@@ -48,6 +48,14 @@ def cmd_chat(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(f"{orchestrator.identity.name}: {result.text}")
+    if result.memory_sources:
+        # Source tracking (F009): say which approved memories informed the
+        # answer, with the same [id] used by ``memory forget``. On stderr so
+        # the answer on stdout stays unchanged.
+        used = "; ".join(
+            f"[{entry_id}] source={source}" for entry_id, source in result.memory_sources
+        )
+        print(f"(memory used: {used})", file=sys.stderr)
     if result.degraded:
         # Only claim a provider fallback when one happened; a memory-only
         # degradation is still answered by the primary provider.
