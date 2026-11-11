@@ -2,7 +2,9 @@
 
 This talks only to ``base_url`` (default ``http://localhost:11434``), a
 local-loopback address by default. No prompt data leaves the machine
-through this provider. It never raises network/parse exceptions to the
+through this provider: for a loopback ``base_url`` the provider's own HTTP
+session ignores proxy environment variables, so the request goes straight
+to the local server. It never raises network/parse exceptions to the
 caller -- everything is translated into ``ModelProviderError`` /
 ``ModelUnavailableError`` so the orchestrator can fall back cleanly.
 """
@@ -13,6 +15,7 @@ import requests
 
 from odysseus.exceptions import ModelProviderError, ModelUnavailableError
 from odysseus.models.base import GenerationRequest, GenerationResponse, ModelProvider
+from odysseus.models.loopback import is_loopback_url
 
 
 _MAX_SERVER_ERROR_CHARS = 200
@@ -64,7 +67,16 @@ class OllamaProvider(ModelProvider):
         self.model_name = model_name
         self.timeout_seconds = timeout_seconds
         self.max_retries = max(0, max_retries)
-        self._session = session or requests.Session()
+        if session is None:
+            session = requests.Session()
+            if is_loopback_url(self.base_url):
+                # requests honours HTTP_PROXY/ALL_PROXY (and ~/.netrc) by
+                # default and, unless NO_PROXY lists the host, would hand a
+                # loopback request -- prompt included -- to that proxy. A
+                # local server is never behind a proxy: connect directly.
+                # A caller-supplied session is left exactly as given.
+                session.trust_env = False
+        self._session = session
 
     def generate(self, request: GenerationRequest) -> GenerationResponse:
         payload: dict[str, object] = {

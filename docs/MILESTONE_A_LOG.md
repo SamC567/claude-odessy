@@ -592,3 +592,17 @@ Append-only log of scheduled-run changes.
 
 - Upper bound of 50 and allowing 0 ("memory off for prompts") were chosen without asking. Reason: 0 is the privacy-conservative end and the default stays 3, so nothing changes unless the value is set; 50 is an arbitrary guard against a typo flooding the prompt. Reversible by editing the `Field` bounds; veto either.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-11 — F003 loopback Ollama requests bypass environment proxies
+
+- Gap: `OllamaProvider` used a default `requests.Session`, which applies `HTTP_PROXY` / `ALL_PROXY` from the environment to every request unless `NO_PROXY` lists the host. With a proxy variable set (common on corporate or VPN setups) and `localhost` not in `NO_PROXY`, the request to the local model server, prompt and approved-memory context included, was sent to the proxy. That contradicts the module's own "no prompt data leaves the machine through this provider" statement and CLAUDE.md's local-first rule, and it also made a running local model look unreachable. Reproduced before the fix with a recording loopback "proxy": it received the `/api/generate` POST.
+- Fix: when `OllamaProvider` creates its own session and `base_url` is loopback, it sets `session.trust_env = False` (direct connection, no environment proxies). `is_loopback_url` moved from `registry.py` to the new `odysseus/models/loopback.py` to avoid a circular import; `registry.py` re-exports it, so `odysseus.health.diagnostics` and any other importer are unaffected. No interface, config or schema change.
+- Test: `test_ollama_loopback_requests_bypass_environment_proxy` (two in-process loopback HTTP servers, one acting as the proxy; asserts the proxy receives nothing and `generate` / `health_check` succeed), `test_ollama_non_loopback_session_keeps_environment_proxy_settings`, `test_ollama_leaves_a_caller_supplied_session_untouched` in tests/test_models.py. The first two fail without the change (verified by stashing `odysseus/`: 2 failed, 145 passed); the third is a guard that passes either way.
+- Suite: 147 passed (baseline 144, python3.12 venv outside the repo, cloud sandbox).
+- Not done: a caller-supplied session is not altered. A non-loopback `base_url` keeps honouring proxy variables. Not run on Windows (there `requests` also consults the system proxy settings; `trust_env = False` skips those too, but this was not exercised). Not tested against a real proxy or a live Ollama.
+- Remaining gaps: F073 unchanged. F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- Non-loopback Ollama URLs keep using environment proxies. Reason: such a URL is only reachable after the user sets `identity.allow_external_providers: true`, and a remote server may legitimately need the proxy; changing that would be a behaviour change nobody asked for. Reversible in one line; veto if all Ollama traffic should be direct.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.

@@ -19,6 +19,7 @@ odysseus/
     echo_provider.py   Dependency-free fallback. Always available, clearly labelled, no network.
     ollama_provider.py Local model integration (Ollama-compatible HTTP API, loopback by default).
     registry.py        build_provider(config) -> ModelProvider. The only place that knows every backend.
+    loopback.py        is_loopback_url(), shared by the registry and providers.
 
   memory/            F009 — persistent memory + review inbox
     models.py          MemoryEntry (content, source, confidence, status, tags).
@@ -101,6 +102,8 @@ odysseus/
   Ollama process. Verify this first against a real local install.
 
 ## Recent fixes
+
+- `OllamaProvider` (F003) connects directly to a loopback `base_url`, ignoring proxy environment variables: when it creates its own HTTP session for `localhost` / a loopback IP it sets `trust_env = False`. Previously `requests` applied `HTTP_PROXY` / `ALL_PROXY` to the call unless `NO_PROXY` happened to list the host, so on a machine with a proxy configured the prompt (with its approved-memory context) was handed to that proxy instead of the local server, and the local model looked unreachable. `is_loopback_url` moved to `odysseus/models/loopback.py` so the provider can use it without importing the registry; it is still importable from `odysseus.models.registry`. Not covered: a session passed in by the caller is left as given; a non-loopback `base_url` (only reachable with `identity.allow_external_providers: true`) still honours proxy variables; `trust_env = False` also turns off `~/.netrc` credentials and the `REQUESTS_CA_BUNDLE` override for that session, which a plain-HTTP loopback server does not use. Verified against two in-process loopback HTTP servers, not a real proxy or a live Ollama.
 
 - Config `memory.context_limit` (F001/F009): the number of approved memories the orchestrator may add to one model prompt is a configuration value (default 3, range 0-50, env `ODYSSEUS_MEMORY__CONTEXT_LIMIT`) instead of the literal `3` that only a caller constructing `Orchestrator` in code could change. The CLI passes it to `Orchestrator(memory_context_limit=...)`. `0` keeps approved memory out of the prompt altogether while leaving it stored, listable and reviewable. A boolean, a fractional number or a value outside the range is a `ConfigError`. Default behaviour is unchanged. Not covered: the limit counts entries, not characters or tokens, so a few very long memories can still crowd a small model's context window; `Orchestrator` itself does not validate a `memory_context_limit` passed directly in code (a negative value behaves like 0).
 

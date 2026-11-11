@@ -7,32 +7,15 @@ the orchestrator or config schema's consumers.
 
 from __future__ import annotations
 
-import ipaddress
-from urllib.parse import urlparse
-
 from odysseus.config import ModelProviderConfig
 from odysseus.logging_setup import audit
 from odysseus.models.base import ModelProvider
 from odysseus.models.echo_provider import EchoProvider
+# Re-exported: callers import ``is_loopback_url`` from this module.
+from odysseus.models.loopback import is_loopback_url
 from odysseus.models.ollama_provider import OllamaProvider
 
 _BUILTIN_PROVIDERS = {"echo", "ollama"}
-
-
-def is_loopback_url(url: str) -> bool:
-    """True if ``url`` points at this machine (localhost or a loopback IP)."""
-    try:
-        host = urlparse(url).hostname
-    except ValueError:
-        return False
-    if not host:
-        return False
-    if host.lower() == "localhost":
-        return True
-    try:
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return False
 
 
 def build_provider(

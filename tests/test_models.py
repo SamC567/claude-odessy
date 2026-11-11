@@ -261,3 +261,87 @@ def test_ollama_health_check_handles_null_or_malformed_model_list():
     # Entries with a non-string name are skipped rather than crashing.
     odd = _FakeResponse({"models": [{"name": None}, {"name": ["x"]}, {"name": "llama3:latest"}]})
     assert OllamaProvider(model_name="llama3", session=_FakeSession(get_result=odd)).health_check()[0]
+
+
+def _serve(handler_cls):
+    """Start a loopback-only HTTP server on a free port; returns (server, url)."""
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler_cls)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, f"http://127.0.0.1:{server.server_address[1]}"
+
+
+def test_ollama_loopback_requests_bypass_environment_proxy(monkeypatch):
+    """A proxy set in the environment must never receive a loopback prompt."""
+    import json
+    from http.server import BaseHTTPRequestHandler
+
+    proxied: list[str] = []
+
+    class _Proxy(BaseHTTPRequestHandler):
+        def _record(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            proxied.append(self.path + " " + self.rfile.read(length).decode("utf-8", "replace"))
+            self.send_response(502)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        do_GET = do_POST = _record
+
+        def log_message(self, *args):
+            pass
+
+    class _Ollama(BaseHTTPRequestHandler):
+        def _send(self, body):
+            data = json.dumps(body).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            self._send({"response": "direct answer"})
+
+        def do_GET(self):
+            self._send({"models": [{"name": "llama3:latest"}]})
+
+        def log_message(self, *args):
+            pass
+
+    proxy, proxy_url = _serve(_Proxy)
+    ollama, ollama_url = _serve(_Ollama)
+    try:
+        for var in ("NO_PROXY", "no_proxy", "HTTPS_PROXY", "https_proxy"):
+            monkeypatch.delenv(var, raising=False)
+        for var in ("HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"):
+            monkeypatch.setenv(var, proxy_url)
+
+        provider = OllamaProvider(base_url=ollama_url, max_retries=0, timeout_seconds=5)
+        response = provider.generate(GenerationRequest(prompt="private prompt"))
+        healthy, _ = provider.health_check()
+    finally:
+        proxy.shutdown()
+        proxy.server_close()
+        ollama.shutdown()
+        ollama.server_close()
+
+    assert response.text == "direct answer"
+    assert healthy is True
+    assert proxied == []
+
+
+def test_ollama_non_loopback_session_keeps_environment_proxy_settings():
+    # An explicitly allowed remote server may legitimately sit behind a proxy.
+    assert OllamaProvider(base_url="http://localhost:11434")._session.trust_env is False
+    assert OllamaProvider(base_url="http://[::1]:11434")._session.trust_env is False
+    assert OllamaProvider(base_url="http://models.example:11434")._session.trust_env is True
+
+
+def test_ollama_leaves_a_caller_supplied_session_untouched():
+    session = requests.Session()
+    OllamaProvider(base_url="http://localhost:11434", session=session)
+    assert session.trust_env is True
