@@ -298,3 +298,21 @@ def test_cli_audit_log_path_is_configurable(tmp_path, capsys, monkeypatch):
         for handler in list(audit_logger.handlers):
             handler.close()
             audit_logger.removeHandler(handler)
+
+
+def test_cli_health_reports_the_fallback_provider(tmp_path, capsys):
+    """``health`` diagnoses the provider ``chat`` degrades to, also in JSON
+    and when the memory database cannot be opened."""
+    import json
+
+    config_path = _write_config(tmp_path)
+    assert main(["--config", str(config_path), "health"]) == 0
+    assert "fallback_provider:echo: ok" in capsys.readouterr().out
+
+    assert main(["--config", str(config_path), "health", "--json"]) == 0
+    checks = {c["name"]: c["status"] for c in json.loads(capsys.readouterr().out)["checks"]}
+    assert checks["fallback_provider:echo"] == "ok"
+
+    (tmp_path / "mem.sqlite3").write_bytes(b"this is not a sqlite database" * 200)
+    assert main(["--config", str(config_path), "health"]) == 1
+    assert "fallback_provider:echo: ok" in capsys.readouterr().out

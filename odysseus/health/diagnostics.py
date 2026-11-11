@@ -337,6 +337,29 @@ def check_model_provider(
     return CheckResult(f"model_provider:{provider.name}", CheckStatus.WARNING, detail)
 
 
+def check_fallback_provider(
+    provider: ModelProvider, primary_ok: bool, timeout_seconds: float | None = None
+) -> CheckResult:
+    """Check the provider the orchestrator degrades to (F073/F003).
+
+    An unhealthy fallback is a WARNING while the primary provider is healthy
+    (nothing is broken yet, but the safety net is gone) and CRITICAL when the
+    primary is not healthy either: no provider can answer a prompt.
+    """
+    result = check_model_provider(provider, timeout_seconds)
+    name = f"fallback_provider:{provider.name}"
+    if result.status == CheckStatus.OK:
+        return CheckResult(name, CheckStatus.OK, result.detail)
+    if primary_ok:
+        return CheckResult(name, CheckStatus.WARNING, result.detail)
+    return CheckResult(
+        name,
+        CheckStatus.CRITICAL,
+        f"{result.detail}; the primary provider is not healthy either, "
+        "so no model provider can answer",
+    )
+
+
 def run_diagnostics(
     config: OdysseusConfig,
     memory_store: MemoryStore | None,
@@ -344,12 +367,17 @@ def run_diagnostics(
     disk_path: Path | None = None,
     audit_log_path: Path | None = None,
     memory_store_error: str | None = None,
+    fallback_provider: ModelProvider | None = None,
 ) -> HealthReport:
     """Run the full diagnostic suite and return a structured report.
 
     ``memory_store`` may be None when the store could not even be opened (e.g. a
     corrupt database); ``memory_store_error`` then becomes a CRITICAL
     ``memory_store`` check so the rest of the report is still produced.
+
+    ``fallback_provider`` is the provider the orchestrator degrades to when
+    ``model_provider`` fails. When given (and not the very same object as
+    ``model_provider``) it gets its own ``fallback_provider:<name>`` check.
     """
     # Default to the volume holding the memory DB (the data that matters),
     # falling back to the working directory if its folder doesn't exist yet.
@@ -396,6 +424,17 @@ def run_diagnostics(
             ),
         ),
     ]
+    if fallback_provider is not None and fallback_provider is not model_provider:
+        primary_ok = checks[-1].status == CheckStatus.OK
+        fallback_name = f"fallback_provider:{getattr(fallback_provider, 'name', 'unknown')}"
+        checks.append(
+            _safe_check(
+                fallback_name,
+                lambda: check_fallback_provider(
+                    fallback_provider, primary_ok, config.health.model_check_timeout_seconds
+                ),
+            )
+        )
     if audit_log_path is not None:
         checks.append(_safe_check("audit_log", lambda: check_audit_log(audit_log_path)))
     return HealthReport(generated_at=datetime.now(timezone.utc), checks=checks)

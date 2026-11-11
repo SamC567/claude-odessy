@@ -309,3 +309,73 @@ def test_empty_report_is_not_reported_healthy():
 
     report = HealthReport(generated_at=datetime.now(timezone.utc))
     assert report.overall_status == CheckStatus.WARNING
+
+
+def test_fallback_provider_gets_its_own_check(tmp_path):
+    """The provider the orchestrator degrades to is diagnosed too (F073)."""
+    config = OdysseusConfig()
+    memory = MemoryStore(tmp_path / "mem.sqlite3")
+
+    class Primary(EchoProvider):
+        name = "primary"
+
+    report = run_diagnostics(
+        config, memory, Primary(), disk_path=tmp_path, fallback_provider=EchoProvider()
+    )
+    by_name = {c.name: c for c in report.checks}
+    assert by_name["model_provider:primary"].status == CheckStatus.OK
+    assert by_name["fallback_provider:echo"].status == CheckStatus.OK
+    assert report.overall_status == CheckStatus.OK
+
+    # Omitted, or the very same object as the primary: no separate check.
+    same = EchoProvider()
+    for kwargs in ({}, {"fallback_provider": same}):
+        report = run_diagnostics(config, memory, same, disk_path=tmp_path, **kwargs)
+        assert not [c for c in report.checks if c.name.startswith("fallback_provider")]
+
+
+def test_unhealthy_fallback_is_warning_alone_and_critical_with_unhealthy_primary(tmp_path):
+    config = OdysseusConfig()
+    memory = MemoryStore(tmp_path / "mem.sqlite3")
+
+    class Down(EchoProvider):
+        name = "down"
+
+        def health_check(self, timeout_seconds=None):
+            return False, "pretend unreachable"
+
+    class Exploding(EchoProvider):
+        name = "exploding"
+
+        def health_check(self, timeout_seconds=None):
+            raise RuntimeError("boom")
+
+    def fallback_check(primary, fallback):
+        report = run_diagnostics(
+            config, memory, primary, disk_path=tmp_path, fallback_provider=fallback
+        )
+        return [c for c in report.checks if c.name.startswith("fallback_provider")][0], report
+
+    # Safety net gone but the primary still answers: WARNING.
+    check, report = fallback_check(EchoProvider(), Down())
+    assert check.name == "fallback_provider:down"
+    assert check.status == CheckStatus.WARNING
+    assert report.overall_status == CheckStatus.WARNING
+
+    # Neither can answer: CRITICAL, and the detail says why.
+    check, report = fallback_check(Down(), Down())
+    assert check.status == CheckStatus.CRITICAL
+    assert "no model provider can answer" in check.detail
+    assert report.overall_status == CheckStatus.CRITICAL
+
+    # A healthy fallback keeps an unreachable primary at WARNING overall.
+    check, report = fallback_check(Down(), EchoProvider())
+    assert check.status == CheckStatus.OK
+    assert report.overall_status == CheckStatus.WARNING
+
+    # A fallback whose check raises is isolated like any other check.
+    check, report = fallback_check(EchoProvider(), Exploding())
+    assert check.name == "fallback_provider:exploding"
+    assert check.status == CheckStatus.CRITICAL
+    assert "boom" in check.detail
+    assert any(c.name == "disk_space" for c in report.checks)

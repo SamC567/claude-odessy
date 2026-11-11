@@ -28,6 +28,7 @@ from odysseus.exceptions import MemoryError_, OdysseusError
 from odysseus.health.diagnostics import run_diagnostics
 from odysseus.logging_setup import configure_logging
 from odysseus.memory.store import MemoryStore
+from odysseus.models.echo_provider import EchoProvider
 from odysseus.models.registry import build_provider
 
 
@@ -73,6 +74,7 @@ def cmd_health(args: argparse.Namespace) -> int:
     try:
         orchestrator, config = _build_orchestrator(args.config)
         memory, provider, memory_error = orchestrator.memory, orchestrator.provider, None
+        fallback = orchestrator.fallback_provider
     except MemoryError_ as exc:
         # A corrupt/unreadable memory DB must still yield a diagnostic report
         # (CRITICAL memory_store) rather than only an error message.
@@ -80,9 +82,12 @@ def cmd_health(args: argparse.Namespace) -> int:
         configure_logging(config.log_level, audit_log_path=config.audit_log_path)
         provider = build_provider(config.model, config.identity.allow_external_providers)
         memory, memory_error = None, str(exc)
+        # Same default the Orchestrator would have used had it been built.
+        fallback = EchoProvider()
     report = run_diagnostics(config, memory, provider,
                              audit_log_path=Path(config.audit_log_path),
-                             memory_store_error=memory_error)
+                             memory_store_error=memory_error,
+                             fallback_provider=fallback)
     if args.json:
         print(json.dumps(report.as_dict(), indent=2))
     else:

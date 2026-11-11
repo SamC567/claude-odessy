@@ -518,3 +518,18 @@ Append-only log of scheduled-run changes.
 
 - Left working-directory-relative resolution as is rather than anchoring relative paths to the project root: anchoring would make an existing install started from another directory switch to a different (apparently empty) memory database and audit log. That needs the user's choice; veto/decide: (a) anchor to project root, (b) keep CWD and fix the field description.
 - Placed `audit_log_path` at the top level next to `log_level` (no new config section); reversible.
+
+## 2026-11-11 — F073/F003 `health` checks the fallback provider too
+
+- Gap: diagnostics covered only the primary model provider. `Orchestrator` always holds a second provider (`fallback_provider`, the built-in `EchoProvider` by default) that answers when the primary fails, but `run_diagnostics` took one provider and `health` never looked at the other. A report with `model_provider:ollama: warning` therefore said nothing about whether `chat` would still get an answer.
+- Fix: `run_diagnostics(..., fallback_provider=None)` adds a `fallback_provider:<name>` check (new `check_fallback_provider`, reusing `check_model_provider` and the configured `health.model_check_timeout_seconds`); `cmd_health` passes `orchestrator.fallback_provider` (and a default `EchoProvider()` on the corrupt-memory path, the same default the orchestrator uses). Unhealthy fallback = WARNING while the primary is OK, CRITICAL when the primary is not OK either. Additive: the parameter is optional and keyword-compatible, no existing check name, status or config changed; the check is skipped when the fallback is the same object as the primary.
+- Test: `test_fallback_provider_gets_its_own_check`, `test_unhealthy_fallback_is_warning_alone_and_critical_with_unhealthy_primary` (tests/test_health.py) and `test_cli_health_reports_the_fallback_provider` (tests/test_cli.py: text, `--json` and corrupt-DB paths). All three fail without the change (verified via stash: 3 failed, 127 passed).
+- Suite: 130 passed (baseline 127, python3.12 venv outside the repo, cloud sandbox).
+- Not done: the fallback is not configurable (it is always the built-in echo provider from the CLI), so in a default install the new check is always OK and the WARNING/CRITICAL branches are exercised only by test doubles. `health` output gains one line / one JSON entry — anything that asserted an exact check count would notice (nothing in this repo does).
+- Remaining F073 gap: no checks for services other than model providers, memory store and audit log — Milestone A defines no other services, so this may simply be complete for now; the user's call.
+
+### Decisions
+
+- Both-unhealthy is CRITICAL (so `health` exits 1). Reason: with neither provider able to answer, `chat` cannot work at all, which is a different state from "optional model down, fallback fine" (WARNING). Unreachable with the built-in echo fallback; reversible by reverting this commit.
+- Separate name prefix `fallback_provider:` rather than a second `model_provider:` entry: in the default config both are `echo`, and two checks with the same name would be ambiguous for anything keying on names; reversible.
+- Still awaiting the user's choice from the previous entry: relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
