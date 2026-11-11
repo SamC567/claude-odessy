@@ -504,3 +504,17 @@ Append-only log of scheduled-run changes.
 - Not done: tags are still not searched by `MemoryStore.query` (content only) — that would change which memories are injected into prompts, so it is left as a separate, deliberate change. `content`/`source`/tags are printed as stored (no control-character escaping, same as the list commands). No `--json` output for `show`.
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: no audit record for `show` — it is a read, and the existing list commands are not audited either; reversible.
+
+## 2026-11-11 — F001/F073 audit log location is configurable
+
+- Gap: the audit log path was the hardcoded literal `"data/audit.log"` in three places in `cli.py` (two `configure_logging` calls and the `health` check), relative to the working directory. It could not be moved (e.g. to another drive or next to a relocated `memory.db_path`), contradicting "configuration separated from application logic" (F001), and `health` could only ever check that one location (F073).
+- Fix: new top-level config field `audit_log_path` (default `data/audit.log`, so behaviour is unchanged), overridable with `ODYSSEUS_AUDIT_LOG_PATH`; the CLI passes it to `configure_logging` and to `run_diagnostics`. Blank values are rejected with `ConfigError`. `config/default.yaml` and `config/.env.example` updated. No interface of `configure_logging`, `run_diagnostics` or `check_audit_log` changed.
+- Test: `test_cli_audit_log_path_is_configurable` (trail written to the configured file, nothing at the old location, `health` reports the configured path) and `test_audit_log_path_default_file_env_and_blank` (both fail without the change, verified via stash).
+- Suite: 127 passed (baseline 125, python3.12 venv outside the repo, cloud sandbox).
+- Not done: relative `audit_log_path` / `memory.db_path` are still resolved against the working directory, not the project root, although the `memory.db_path` description says "project root" (recorded in ARCHITECTURE.md). Windows path handling of the new field is untested here.
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+
+### Decisions
+
+- Left working-directory-relative resolution as is rather than anchoring relative paths to the project root: anchoring would make an existing install started from another directory switch to a different (apparently empty) memory database and audit log. That needs the user's choice; veto/decide: (a) anchor to project root, (b) keep CWD and fix the field description.
+- Placed `audit_log_path` at the top level next to `log_level` (no new config section); reversible.

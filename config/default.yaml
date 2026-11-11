@@ -29,3 +29,4 @@ health:
   pending_review_warn_count: 100        # warn when more memory entries than this await review
 
 log_level: INFO
+audit_log_path: data/audit.log   # where the audit trail is appended (relative to the working directory)

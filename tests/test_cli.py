@@ -262,3 +262,39 @@ def test_cli_memory_show_unknown_id_is_a_clean_error(tmp_path, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "No memory entry with id=99" in captured.err
+
+
+def test_cli_audit_log_path_is_configurable(tmp_path, capsys, monkeypatch):
+    """``audit_log_path`` decides where the audit trail goes and what ``health`` checks."""
+    import logging
+
+    from odysseus.logging_setup import AUDIT_LOGGER_NAME
+
+    audit_path = tmp_path / "trail" / "my-audit.log"
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        f"memory:\n  db_path: {(tmp_path / 'mem.sqlite3').as_posix()}\n"
+        f"model:\n  provider: echo\n"
+        f"audit_log_path: {audit_path.as_posix()}\n"
+    )
+    workdir = tmp_path / "cwd"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    try:
+        assert main(["--config", str(config_path), "chat", "hello"]) == 0
+        assert "orchestrator.generate" in audit_path.read_text(encoding="utf-8")
+        # Nothing is written to the old hardcoded location.
+        assert not (workdir / "data").exists()
+
+        capsys.readouterr()
+        assert main(["--config", str(config_path), "health"]) == 0
+        out = capsys.readouterr().out
+        audit_line = next(line for line in out.splitlines() if "audit_log:" in line)
+        assert "audit_log: ok" in audit_line
+        assert "my-audit.log" in audit_line
+    finally:
+        # Release the file handle so tmp_path can be removed (Windows).
+        audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
+        for handler in list(audit_logger.handlers):
+            handler.close()
+            audit_logger.removeHandler(handler)

@@ -136,6 +136,22 @@ class OdysseusConfig(BaseModel):
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     health: HealthConfig = Field(default_factory=HealthConfig)
     log_level: str = Field(default="INFO")
+    audit_log_path: str = Field(
+        default="data/audit.log",
+        description=(
+            "File the audit trail is appended to. A relative path is resolved "
+            "against the process working directory (same as memory.db_path)."
+        ),
+    )
+
+    @field_validator("audit_log_path")
+    @classmethod
+    def _audit_log_path_is_set(cls, value: str) -> str:
+        # A blank path would silently switch the audit trail to stderr-only
+        # (not persisted); make turning persistence off impossible by typo.
+        if not value.strip():
+            raise ValueError("audit_log_path must not be blank")
+        return value.strip()
 
     @field_validator("log_level")
     @classmethod
@@ -150,7 +166,7 @@ class OdysseusConfig(BaseModel):
 
 # Top-level fields that are plain values rather than sections; these take a
 # single-segment env override (ODYSSEUS_<FIELD>) instead of SECTION__FIELD.
-_TOP_LEVEL_SCALAR_FIELDS = frozenset({"log_level"})
+_TOP_LEVEL_SCALAR_FIELDS = frozenset({"log_level", "audit_log_path"})
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -171,7 +187,7 @@ def _apply_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
 
     Example: ``ODYSSEUS_MODEL__PROVIDER=ollama`` overrides ``model.provider``.
     Top-level scalar fields have no section: ``ODYSSEUS_LOG_LEVEL=DEBUG``
-    overrides ``log_level``. A single-segment name that is a section (e.g.
+    overrides ``log_level`` (likewise ``ODYSSEUS_AUDIT_LOG_PATH``). A single-segment name that is a section (e.g.
     ``ODYSSEUS_MODEL``) is ignored, as are unknown names.
     """
     data = dict(data)

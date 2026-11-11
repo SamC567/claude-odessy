@@ -33,7 +33,7 @@ from odysseus.models.registry import build_provider
 
 def _build_orchestrator(config_path: str | None) -> tuple[Orchestrator, object]:
     config = load_config(config_path)
-    configure_logging(config.log_level, audit_log_path="data/audit.log")
+    configure_logging(config.log_level, audit_log_path=config.audit_log_path)
     identity = JarvisIdentity.from_config(config.identity)
     provider = build_provider(config.model, config.identity.allow_external_providers)
     memory = MemoryStore(config.memory.db_path, config.memory.auto_approve_threshold)
@@ -77,11 +77,11 @@ def cmd_health(args: argparse.Namespace) -> int:
         # A corrupt/unreadable memory DB must still yield a diagnostic report
         # (CRITICAL memory_store) rather than only an error message.
         config = load_config(args.config)
-        configure_logging(config.log_level, audit_log_path="data/audit.log")
+        configure_logging(config.log_level, audit_log_path=config.audit_log_path)
         provider = build_provider(config.model, config.identity.allow_external_providers)
         memory, memory_error = None, str(exc)
     report = run_diagnostics(config, memory, provider,
-                             audit_log_path=Path("data/audit.log"),
+                             audit_log_path=Path(config.audit_log_path),
                              memory_store_error=memory_error)
     if args.json:
         print(json.dumps(report.as_dict(), indent=2))

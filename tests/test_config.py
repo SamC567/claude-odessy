@@ -140,3 +140,16 @@ def test_env_single_segment_section_name_is_ignored(tmp_path, monkeypatch):
     path.write_text("model:\n  provider: echo\n")
     monkeypatch.setenv("ODYSSEUS_MODEL", "ollama")
     assert load_config(path).model.provider == "echo"
+
+
+def test_audit_log_path_default_file_env_and_blank(tmp_path, monkeypatch):
+    assert load_config().audit_log_path == "data/audit.log"  # unchanged default
+    custom = tmp_path / "audit.yaml"
+    custom.write_text("audit_log_path: ' logs/trail.log '\n")
+    assert load_config(custom).audit_log_path == "logs/trail.log"
+    blank = tmp_path / "blank.yaml"
+    blank.write_text("audit_log_path: '  '\n")
+    with pytest.raises(ConfigError):
+        load_config(blank)
+    monkeypatch.setenv("ODYSSEUS_AUDIT_LOG_PATH", "elsewhere/audit.log")
+    assert load_config(custom).audit_log_path == "elsewhere/audit.log"
