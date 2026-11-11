@@ -637,3 +637,18 @@ Append-only log of scheduled-run changes.
 - Bidi controls and Unicode line/paragraph separators are left as they are in a model reply (they are escaped in memory listings). Reason: a reply is prose, and right-to-left languages use these marks legitimately; escaping them would garble ordinary Arabic/Hebrew answers. Cost: a reply can still be displayed in an order different from its stored characters. Reversible by dropping the `multiline` exception; veto if replies should be escaped as strictly as listings.
 - Stdout of `chat` changes only for replies that contain control characters other than newline/tab (and `\r\n` is printed as `\n`). A script that parsed raw control bytes out of the reply would see escapes instead; none exists in this repo.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-11 — F073 `health` report details cannot drive the terminal
+
+- Gap: `health` (text mode) printed each check's detail exactly as produced. The `model_provider:ollama` detail quotes text chosen by whatever answers on the model port: the installed model names from `/api/tags`, the exception text for an unreachable server, a redirect target. An ESC sequence there could clear the screen or retitle the window, and a newline could add a forged `  - memory_store: ok — ...` line to the report a user reads to decide whether the system is healthy. Listed as "Not done: `health` details ... are still printed as produced" in the previous entry.
+- Fix: `cmd_health` prints the summary line, each check name and each detail through the existing one-line `cli._printable`. Display only; `HealthReport`, exit codes and `health --json` are unchanged (`json.dumps` already escapes control characters). No interface, config or schema change.
+- Test: `test_cli_health_details_cannot_drive_the_terminal` in tests/test_cli.py (scripted provider patched in for `build_provider`; asserts no raw ESC/CR/bidi override, exactly one `memory_store` line, and that `--json` round-trips the detail unchanged). Fails without the change (verified by stashing `odysseus/cli.py`: 1 failed). `test_cli_health_ordinary_details_print_unchanged` is a guard that passes either way.
+- Suite: 154 passed (baseline 152, python3.12 venv outside the repo, cloud sandbox).
+- Not done: `error: ...` messages printed by `main()` are still printed as produced (next candidate). A literal backslash is not doubled. Not run on Windows or looked at in a real terminal emulator; not exercised against a live Ollama.
+- Environment note: the first `pip install -r requirements-dev.txt` into a fresh venv hung for over two minutes and was killed; a re-run completed immediately. The default `python` here is 3.11 without pytest, so the suite was run with `python3.12` in a venv.
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- Bidi controls are escaped in health output (one-line mode), unlike in a model reply. Reason: a report line is a status record, not prose, and a right-to-left override could reorder what a check appears to say. Cost: a data path containing right-to-left text shows `\u200f`-style escapes in the text report (`--json` is unaffected). Reversible in one line; veto if paths should print raw.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.

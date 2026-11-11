@@ -487,3 +487,54 @@ def test_cli_chat_degraded_reason_cannot_drive_the_terminal(tmp_path, capsys, mo
         "(degraded: fell back to echo; request failed (server said: \\x1b[2Jgone)"
         "\\n(degraded: forged)\\u202e)\n"
     )
+
+
+class _ScriptedHealthProvider(_ScriptedProvider):
+    """Provider whose health detail is chosen by the test (as a server's would be)."""
+
+    def __init__(self, detail):
+        super().__init__(text="ok")
+        self._detail = detail
+
+    def health_check(self, timeout_seconds=None):
+        return False, self._detail
+
+
+def test_cli_health_details_cannot_drive_the_terminal(tmp_path, capsys, monkeypatch):
+    # A check's detail can quote the model server (installed model names, an
+    # error body): it must not be able to clear the screen, or forge another
+    # check line that reports a problem away.
+    detail = "model missing (installed: \x1b[2Jevil\n  - memory_store: ok — forged\u202e)\r"
+    monkeypatch.setattr(
+        "odysseus.cli.build_provider", lambda *a, **k: _ScriptedHealthProvider(detail)
+    )
+    config_path = _write_config(tmp_path)
+    assert main(["--config", str(config_path), "health"]) == 0
+    out = capsys.readouterr().out
+    for raw in ("\x1b", "\r", "\u202e"):
+        assert raw not in out
+    lines = out.splitlines()
+    # One summary line plus exactly one line per check: nothing was forged.
+    assert sum(line.startswith("  - memory_store:") for line in lines) == 1
+    assert (
+        "  - model_provider:scripted: warning — model missing (installed: "
+        "\\x1b[2Jevil\\n  - memory_store: ok — forged\\u202e)\\r"
+    ) in lines
+
+    # --json is unchanged: the detail round-trips exactly, with no raw control
+    # character in the output.
+    import json
+
+    assert main(["--config", str(config_path), "health", "--json"]) == 0
+    out = capsys.readouterr().out
+    assert "\x1b" not in out
+    checks = {c["name"]: c["detail"] for c in json.loads(out)["checks"]}
+    assert checks["model_provider:scripted"] == detail
+
+
+def test_cli_health_ordinary_details_print_unchanged(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    assert main(["--config", str(config_path), "health"]) == 0
+    out = capsys.readouterr().out
+    assert "\\" not in out.replace(str(tmp_path), "")
+    assert " — " in out

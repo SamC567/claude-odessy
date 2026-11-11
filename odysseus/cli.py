@@ -137,9 +137,17 @@ def cmd_health(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(report.as_dict(), indent=2))
     else:
-        print(report.summary_line())
+        # A detail can quote text chosen by the model server (installed model
+        # names, an error body, a redirect target) or a path from config, so
+        # every line gets the one-line treatment: one check, one line, and no
+        # control character reaches the terminal. ``--json`` needs none of
+        # this: json.dumps already escapes control characters.
+        print(_printable(report.summary_line()))
         for check in report.checks:
-            print(f"  - {check.name}: {check.status.value} — {check.detail}")
+            print(
+                f"  - {_printable(check.name)}: {check.status.value} — "
+                f"{_printable(check.detail)}"
+            )
     return 1 if report.overall_status.value == "critical" else 0
 
 
