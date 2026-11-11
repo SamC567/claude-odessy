@@ -538,3 +538,38 @@ def test_cli_health_ordinary_details_print_unchanged(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "\\" not in out.replace(str(tmp_path), "")
     assert " — " in out
+
+
+def test_cli_error_message_cannot_drive_the_terminal(tmp_path, capsys, monkeypatch):
+    # An error can quote text that is not the program's own -- here a database
+    # path from the environment. It must not clear the screen, reorder the
+    # line, or add a second line that itself looks like an ``error:`` report.
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a directory")
+    hostile = blocker / "a\x1b[2Jb\nerror: forged‮\r" / "mem.sqlite3"
+    monkeypatch.setenv("ODYSSEUS_MEMORY__DB_PATH", str(hostile))
+    config_path = _write_config(tmp_path)
+
+    rc = main(["--config", str(config_path), "chat", "hello"])
+    err = capsys.readouterr().err
+    assert rc == 2
+    for raw in ("\x1b", "\r", "‮"):
+        assert raw not in err
+    assert "\\x1b[2J" in err  # shown, not obeyed
+    error_lines = [line for line in err.splitlines() if line.startswith("error:")]
+    assert len(error_lines) == 1
+    assert error_lines[0].startswith("error: Could not create memory database directory")
+    assert "forged" in err  # nothing is dropped, only made visible
+
+
+def test_cli_multiline_config_error_stays_readable(tmp_path, capsys):
+    # Guard: configuration errors are legitimately multi-line and must stay so.
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("log_level: LOUD\n")
+    rc = main(["--config", str(config_path), "chat", "hello"])
+    err = capsys.readouterr().err
+    assert rc == 2
+    lines = err.splitlines()
+    assert lines[0].startswith("error: Invalid configuration:")
+    assert any("log_level must be one of" in line for line in lines[1:])
+    assert "\\n" not in err

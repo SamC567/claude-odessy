@@ -70,6 +70,22 @@ def _printable(value: object, multiline: bool = False) -> str:
     return "".join(out)
 
 
+def _print_error(exc: object) -> None:
+    """Print ``error: <message>`` on stderr without letting the message drive the terminal.
+
+    A message can quote text that is not this program's: a path from the
+    config file, an environment variable or ``--config``, a value from a
+    corrupt memory row. Each line goes through the one-line ``_printable``
+    (control characters and bidi controls shown as escapes). Line breaks are
+    kept, because configuration errors are legitimately multi-line, but every
+    continuation line is indented so that only the first line can start with
+    ``error:`` -- a newline in a quoted value cannot add a second, forged
+    error line.
+    """
+    lines = str(exc).replace("\r\n", "\n").split("\n")
+    print("error: " + "\n  ".join(_printable(line) for line in lines), file=sys.stderr)
+
+
 def _build_orchestrator(config_path: str | None) -> tuple[Orchestrator, object]:
     config = load_config(config_path)
     configure_logging(config.log_level, audit_log_path=config.audit_log_path)
@@ -92,7 +108,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
     except ValueError as exc:
         # Invalid user input (empty/blank prompt): report cleanly instead of
         # a traceback, same convention as ``memory remember``.
-        print(f"error: {exc}", file=sys.stderr)
+        _print_error(exc)
         return 2
     # The reply is model output: it must not be able to drive the terminal.
     print(f"{orchestrator.identity.name}: {_printable(result.text, multiline=True)}")
@@ -232,7 +248,7 @@ def cmd_memory_remember(args: argparse.Namespace) -> int:
     except ValueError as exc:
         # Invalid user input (empty content/source, confidence outside 0..1):
         # report cleanly instead of a traceback.
-        print(f"error: {exc}", file=sys.stderr)
+        _print_error(exc)
         return 2
     print(f"Submitted as entry [{entry.id}] with status={entry.status.value}")
     return 0
@@ -336,7 +352,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.func(args)
     except OdysseusError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        _print_error(exc)
         return 2
 
 

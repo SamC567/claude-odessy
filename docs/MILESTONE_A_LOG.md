@@ -652,3 +652,17 @@ Append-only log of scheduled-run changes.
 
 - Bidi controls are escaped in health output (one-line mode), unlike in a model reply. Reason: a report line is a status record, not prose, and a right-to-left override could reorder what a check appears to say. Cost: a data path containing right-to-left text shows `\u200f`-style escapes in the text report (`--json` is unaffected). Reversible in one line; veto if paths should print raw.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-11 — F001 CLI `error:` messages cannot drive the terminal
+
+- Gap: `main()` and the input-error paths of `chat` / `memory remember` printed `error: {exc}` exactly as produced. An error message can quote text that is not the program's own: a path from the config file, an environment variable or `--config`, a value from a corrupt memory row. Reproduced before the change: a config whose `memory.db_path` contained ESC `[2J` and a newline followed by `error: fake` made `chat` send the raw escape sequence to the terminal and print a second line starting with `error:`. Listed as "Not done: `error: ...` messages printed by `main()`" (next candidate) in the previous entry.
+- Fix: new `cli._print_error(exc)`, used at all three `error:` sites. Each line of the message goes through the existing one-line `cli._printable`; line breaks are kept (pydantic and YAML configuration errors are multi-line) and continuation lines are indented two spaces, so only the first line can begin with `error:`. Display only; no interface, config or schema change; exception messages, exit codes and the audit log are untouched.
+- Test: `test_cli_error_message_cannot_drive_the_terminal` in tests/test_cli.py (hostile `ODYSSEUS_MEMORY__DB_PATH` under a file that blocks directory creation; asserts no raw ESC/CR/bidi override and exactly one line starting with `error:`). Fails without the change (verified by stashing `odysseus/cli.py`: 1 failed, 155 passed). `test_cli_multiline_config_error_stays_readable` is a guard that passes either way.
+- Suite: 156 passed (baseline 154, python3.12 venv outside the repo, cloud sandbox).
+- Not done: log lines that `logging` writes to stderr (e.g. the "audit log ... is not writable" WARNING, which quotes `audit_log_path`) and argparse's own usage errors are still printed as produced. A literal backslash is not doubled. Not run on Windows or looked at in a real terminal emulator.
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox). Seen while reading `OllamaProvider.generate`, not acted on: a whitespace-only `response` is accepted as a usable reply (an empty one is not), and the "no usable 'response' field" error quotes the whole response body without a length cap.
+
+### Decisions
+
+- Multi-line error messages stay multi-line, with continuation lines indented two spaces further than before, instead of being collapsed to one line with `\n` escapes. Reason: pydantic's "Invalid configuration" report is unreadable on one line. Cost: a script that matched continuation lines of stderr by exact leading whitespace would see two extra spaces; none exists in this repo. Reversible in one line; veto if errors should be strictly one line.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
