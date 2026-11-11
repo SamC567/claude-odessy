@@ -495,3 +495,12 @@ Append-only log of scheduled-run changes.
 - Suite: 123 passed (baseline 121, python3.12 venv outside the repo).
 - Not done: the listing cannot tell a rejection from a retraction (both are REJECTED; see the 2026-11-08 decision not to add an enum value) — the audit log's `previous=` field still can. No paging/limit for a large rejected set. `source`/`content` are printed as stored (no control-character escaping, same as the other list commands).
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+
+## 2026-11-11 — F009 `memory show <id>` displays an entry's full record
+- Gap: part of what F009 stores was write-only from the CLI. `memory remember --tags ...` persists tags and every entry has a `created_at`, but none of `list-pending` / `list-approved` / `list-rejected` prints either, and there was no single-entry view, so checking an entry's tags or when it was proposed meant opening SQLite. `MemoryStore.get` existed but had no CLI caller.
+- Fix: CLI `memory show <id>` prints content, status, source, confidence, tags, created, reviewer and reviewed (UTC ISO timestamps, `-` when unset). Read-only, calls the existing `MemoryStore.get`; an unknown id prints `error: No memory entry with id=N` to stderr and exits 2 (same convention as other invalid input). No store, schema, config or existing-interface change. README command list and the `cli.py` usage docstring updated (the docstring also gains the previously missing `memory forget`).
+- Test: `test_cli_memory_show_displays_full_record_including_tags` and `test_cli_memory_show_unknown_id_is_a_clean_error` (both fail without the change, verified via stash).
+- Suite: 125 passed (baseline 123, python3.12 venv outside the repo).
+- Not done: tags are still not searched by `MemoryStore.query` (content only) — that would change which memories are injected into prompts, so it is left as a separate, deliberate change. `content`/`source`/tags are printed as stored (no control-character escaping, same as the list commands). No `--json` output for `show`.
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: no audit record for `show` — it is a read, and the existing list commands are not audited either; reversible.

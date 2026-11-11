@@ -98,6 +98,8 @@ odysseus/
 
 ## Recent fixes
 
+- CLI `memory show <id>` (F009 source tracking) prints one entry's full stored record: content, status, source, confidence, tags, creation time, reviewer and review time (UTC). Previously tags given to `memory remember --tags` and an entry's creation time were stored but shown by no command, so they could only be read from SQLite directly. Read-only, uses the existing `MemoryStore.get`; an unknown id prints `error: No memory entry with id=N` and exits 2. Tags are still not used by retrieval (`MemoryStore.query` matches content only).
+
 - `MemoryStore.list_rejected()` and CLI `memory list-rejected` (F009 review workflow): rejected and retracted entries were kept in the database "so the action is inspectable", but nothing could list them — only `list-pending` and `list-approved` existed, so who rejected or withdrew a fact, and when, could only be read from `data/audit.log` or SQLite directly. The command prints id, confidence, source, reviewer, review time (UTC) and content, oldest first. Read-only. A rejection and a retraction both carry the REJECTED status, so the listing does not say which of the two an entry was (the audit log's `previous=` field does).
 
 - `chat` CLI (F009 source tracking) prints which approved memories informed an answer, e.g. `(memory used: [1] source=user-note)`, on stderr; the `[id]` is the one `memory forget` takes. Previously `InteractionResult.memory_sources` was recorded and audited but never shown, so a user could not tell from the CLI that memory shaped an answer, or which entry to retract. Only id and source are shown (not the content); nothing is printed when no memory was used. Stdout is unchanged.

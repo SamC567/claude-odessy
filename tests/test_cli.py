@@ -228,3 +228,37 @@ def test_cli_memory_list_rejected_shows_decision_trail(tmp_path, capsys):
     assert "[1]" in lines[0] and "wrong fact" in lines[0] and "reviewer=alice" in lines[0]
     assert "[2]" in lines[1] and "stale fact" in lines[1] and "reviewer=bob" in lines[1]
     assert "reviewed=20" in lines[0]
+
+
+def test_cli_memory_show_displays_full_record_including_tags(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path), "memory"]
+    main(base + ["remember", "likes green tea", "--source", "user-note",
+                 "--confidence", "0.7", "--tags", "food", "drink"])
+    capsys.readouterr()
+
+    assert main(base + ["show", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "[1] likes green tea" in out
+    assert "status:     pending" in out
+    assert "source:     user-note" in out
+    assert "confidence: 0.70" in out
+    assert "tags:       food, drink" in out
+    assert "created:    20" in out
+    assert "reviewer:   -" in out and "reviewed:   -" in out
+
+    main(base + ["approve", "1", "--reviewer", "alice"])
+    capsys.readouterr()
+    assert main(base + ["show", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "status:     approved" in out
+    assert "reviewer:   alice" in out
+    assert "reviewed:   20" in out
+
+
+def test_cli_memory_show_unknown_id_is_a_clean_error(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    assert main(["--config", str(config_path), "memory", "show", "99"]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "No memory entry with id=99" in captured.err

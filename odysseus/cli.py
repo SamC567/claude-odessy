@@ -6,8 +6,10 @@ Usage:
     python -m odysseus.cli memory list-pending
     python -m odysseus.cli memory list-approved
     python -m odysseus.cli memory list-rejected
+    python -m odysseus.cli memory show <id>
     python -m odysseus.cli memory approve <id>
     python -m odysseus.cli memory reject <id>
+    python -m odysseus.cli memory forget <id>
     python -m odysseus.cli memory remember "fact" --source user --confidence 0.8
     python -m odysseus.cli config show
 """
@@ -132,6 +134,29 @@ def cmd_memory_list_rejected(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_memory_show(args: argparse.Namespace) -> int:
+    # Source tracking (F009): the one place the full stored record of an entry
+    # is visible -- tags and creation time are otherwise write-only at the CLI.
+    orchestrator, _ = _build_orchestrator(args.config)
+    entry = orchestrator.memory.get(args.entry_id)
+    if entry is None:
+        print(f"error: No memory entry with id={args.entry_id}", file=sys.stderr)
+        return 2
+
+    def _when(value) -> str:
+        return value.isoformat(timespec="seconds") if value else "-"
+
+    print(f"[{entry.id}] {entry.content}")
+    print(f"  status:     {entry.status.value}")
+    print(f"  source:     {entry.source}")
+    print(f"  confidence: {entry.confidence:.2f}")
+    print(f"  tags:       {', '.join(entry.tags) if entry.tags else '-'}")
+    print(f"  created:    {_when(entry.created_at)}")
+    print(f"  reviewer:   {entry.reviewer or '-'}")
+    print(f"  reviewed:   {_when(entry.reviewed_at)}")
+    return 0
+
+
 def cmd_memory_remember(args: argparse.Namespace) -> int:
     orchestrator, _ = _build_orchestrator(args.config)
     try:
@@ -205,6 +230,12 @@ def build_parser() -> argparse.ArgumentParser:
         "list-rejected", help="List rejected or retracted entries and who decided"
     )
     list_rejected.set_defaults(func=cmd_memory_list_rejected)
+
+    show = memory_sub.add_parser(
+        "show", help="Show one entry in full (status, source, tags, timestamps)"
+    )
+    show.add_argument("entry_id", type=int)
+    show.set_defaults(func=cmd_memory_show)
 
     remember = memory_sub.add_parser("remember", help="Submit a candidate memory")
     remember.add_argument("content")
