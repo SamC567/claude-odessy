@@ -334,3 +334,21 @@ def test_store_raises_typed_error_when_db_directory_cannot_be_created(tmp_path):
     blocker.write_text("not a directory")
     with pytest.raises(MemoryError_, match="Could not create memory database directory"):
         MemoryStore(blocker / "sub" / "memory.sqlite3")
+
+
+def test_list_rejected_shows_rejected_and_retracted_with_reviewer(memory_store: MemoryStore):
+    assert memory_store.list_rejected() == []
+    refused = memory_store.submit_candidate(MemoryEntry("wrong fact", "guess", 0.2))
+    withdrawn = memory_store.submit_candidate(MemoryEntry("stale fact", "note", 0.9))
+    kept = memory_store.submit_candidate(MemoryEntry("good fact", "note", 0.9))
+    memory_store.reject(refused.id, reviewer="alice")
+    memory_store.approve(withdrawn.id, reviewer="alice")
+    memory_store.retract(withdrawn.id, reviewer="bob")
+    memory_store.approve(kept.id, reviewer="alice")
+
+    rejected = memory_store.list_rejected()
+    assert [(e.id, e.reviewer) for e in rejected] == [
+        (refused.id, "alice"),
+        (withdrawn.id, "bob"),
+    ]
+    assert all(e.status == MemoryStatus.REJECTED and e.reviewed_at for e in rejected)

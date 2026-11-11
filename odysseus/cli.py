@@ -5,6 +5,7 @@ Usage:
     python -m odysseus.cli health
     python -m odysseus.cli memory list-pending
     python -m odysseus.cli memory list-approved
+    python -m odysseus.cli memory list-rejected
     python -m odysseus.cli memory approve <id>
     python -m odysseus.cli memory reject <id>
     python -m odysseus.cli memory remember "fact" --source user --confidence 0.8
@@ -114,6 +115,23 @@ def cmd_memory_list_approved(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_memory_list_rejected(args: argparse.Namespace) -> int:
+    # Review workflow (F009): rejected/retracted entries are kept, not
+    # deleted, so the decision trail must be readable without opening SQLite.
+    orchestrator, _ = _build_orchestrator(args.config)
+    rejected = orchestrator.memory.list_rejected()
+    if not rejected:
+        print("No rejected or retracted memories.")
+        return 0
+    for entry in rejected:
+        reviewed = entry.reviewed_at.isoformat(timespec="seconds") if entry.reviewed_at else "?"
+        print(
+            f"[{entry.id}] ({entry.confidence:.2f}, {entry.source}, "
+            f"reviewer={entry.reviewer}, reviewed={reviewed}) {entry.content}"
+        )
+    return 0
+
+
 def cmd_memory_remember(args: argparse.Namespace) -> int:
     orchestrator, _ = _build_orchestrator(args.config)
     try:
@@ -182,6 +200,11 @@ def build_parser() -> argparse.ArgumentParser:
         "list-approved", help="List approved memories (find ids for 'forget')"
     )
     list_approved.set_defaults(func=cmd_memory_list_approved)
+
+    list_rejected = memory_sub.add_parser(
+        "list-rejected", help="List rejected or retracted entries and who decided"
+    )
+    list_rejected.set_defaults(func=cmd_memory_list_rejected)
 
     remember = memory_sub.add_parser("remember", help="Submit a candidate memory")
     remember.add_argument("content")

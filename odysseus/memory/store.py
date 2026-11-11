@@ -218,6 +218,14 @@ class MemoryStore:
         """All permanent (approved) memory entries."""
         return self._list_by_status(MemoryStatus.APPROVED)
 
+    def list_rejected(self) -> list[MemoryEntry]:
+        """All rejected or retracted entries (never used in answers).
+
+        Kept so every review decision stays inspectable: who rejected or
+        withdrew what, and when (``reviewer`` / ``reviewed_at``).
+        """
+        return self._list_by_status(MemoryStatus.REJECTED)
+
     def _list_by_status(self, status: MemoryStatus) -> list[MemoryEntry]:
         rows = self._read(
             "SELECT * FROM memory_entries WHERE status = ? ORDER BY created_at ASC",

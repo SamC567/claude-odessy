@@ -41,6 +41,7 @@ permanent memory until explicitly approved:
 python -m odysseus.cli memory remember "fact text" --source user --confidence 0.8
 python -m odysseus.cli memory list-pending
 python -m odysseus.cli memory approve 1 --reviewer alice
+python -m odysseus.cli memory list-rejected
 ```
 
 ## Docs

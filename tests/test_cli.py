@@ -209,3 +209,22 @@ def test_cli_chat_cites_no_memory_when_none_was_used(tmp_path, capsys):
     config_path = _write_config(tmp_path)
     assert main(["--config", str(config_path), "chat", "hello"]) == 0
     assert "memory used" not in capsys.readouterr().err
+
+
+def test_cli_memory_list_rejected_shows_decision_trail(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path), "memory"]
+    assert main(base + ["list-rejected"]) == 0
+    assert "No rejected or retracted memories." in capsys.readouterr().out
+    main(base + ["remember", "wrong fact", "--source", "guess", "--confidence", "0.2"])
+    main(base + ["remember", "stale fact", "--source", "note", "--confidence", "0.9"])
+    main(base + ["reject", "1", "--reviewer", "alice"])
+    main(base + ["approve", "2"])
+    main(base + ["forget", "2", "--reviewer", "bob"])
+    capsys.readouterr()
+    assert main(base + ["list-rejected"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 2
+    assert "[1]" in lines[0] and "wrong fact" in lines[0] and "reviewer=alice" in lines[0]
+    assert "[2]" in lines[1] and "stale fact" in lines[1] and "reviewer=bob" in lines[1]
+    assert "reviewed=20" in lines[0]

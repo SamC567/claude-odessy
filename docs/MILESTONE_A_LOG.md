@@ -487,3 +487,11 @@ Append-only log of scheduled-run changes.
 
 ### Decisions
 - The line is always printed (no `--sources` flag) and goes to stderr. Reason: stdout — the answer — stays byte-for-byte unchanged for anything that parses it, and showing by default is the transparent choice for a privacy-first assistant. If you would rather have it opt-in or on stdout, say so; reversible by reverting this one commit.
+
+## 2026-11-11 — F009 rejected/retracted memories can be listed
+- Gap: the review workflow had no read path for its negative decisions. `reject` and `retract` keep the row (with `reviewer` and `reviewed_at`) precisely so the decision stays inspectable, but `MemoryStore` only exposed `list_pending` / `list_approved` and the CLI only `list-pending` / `list-approved`. After `memory forget 3` there was no command that showed entry 3 again, who withdrew it, or when.
+- Fix: `MemoryStore.list_rejected()` (same `_list_by_status` path as the other two) and CLI `memory list-rejected`, printing id, confidence, source, reviewer, review time and content. Additive and read-only; no schema, config or existing-interface change. README command list updated.
+- Test: `test_list_rejected_shows_rejected_and_retracted_with_reviewer` and `test_cli_memory_list_rejected_shows_decision_trail` (both fail without the change, verified via stash).
+- Suite: 123 passed (baseline 121, python3.12 venv outside the repo).
+- Not done: the listing cannot tell a rejection from a retraction (both are REJECTED; see the 2026-11-08 decision not to add an enum value) — the audit log's `previous=` field still can. No paging/limit for a large rejected set. `source`/`content` are printed as stored (no control-character escaping, same as the other list commands).
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.

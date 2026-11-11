@@ -98,6 +98,8 @@ odysseus/
 
 ## Recent fixes
 
+- `MemoryStore.list_rejected()` and CLI `memory list-rejected` (F009 review workflow): rejected and retracted entries were kept in the database "so the action is inspectable", but nothing could list them — only `list-pending` and `list-approved` existed, so who rejected or withdrew a fact, and when, could only be read from `data/audit.log` or SQLite directly. The command prints id, confidence, source, reviewer, review time (UTC) and content, oldest first. Read-only. A rejection and a retraction both carry the REJECTED status, so the listing does not say which of the two an entry was (the audit log's `previous=` field does).
+
 - `chat` CLI (F009 source tracking) prints which approved memories informed an answer, e.g. `(memory used: [1] source=user-note)`, on stderr; the `[id]` is the one `memory forget` takes. Previously `InteractionResult.memory_sources` was recorded and audited but never shown, so a user could not tell from the CLI that memory shaped an answer, or which entry to retract. Only id and source are shown (not the content); nothing is printed when no memory was used. Stdout is unchanged.
 
 - `MemoryStore(db_path)` (F009/F073) raises `MemoryError_` when the database's directory cannot be created (a file where the directory should be, an unwritable parent); previously a raw `OSError` escaped, so every CLI command ended in a traceback and `health` produced no report. `health` now shows `memory_store` CRITICAL with the rest of the report; other commands print `error: ...` and exit 2. A caller that caught `OSError` from the constructor must catch `MemoryError_` instead (none in this repo). Windows ACL behaviour untested here.
