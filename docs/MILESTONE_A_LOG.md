@@ -417,3 +417,12 @@ Append-only log of scheduled-run changes.
 - Not verified: whether a given real Ollama version actually sends `"models": null`; simulated server only, as for the rest of `OllamaProvider`.
 - Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
 - Decision: a non-list `models` reports reachable/"unreadable" rather than "model missing", matching the existing policy for an unparseable body (do not claim a model is missing without evidence); reversible.
+
+## 2026-11-11 — F009 retrieval ranks by matched terms before confidence
+- Gap: `MemoryStore.query` matched any entry containing any query word of 3+ letters and ordered purely by confidence; with the orchestrator's context limit of 3, high-confidence entries sharing only a common word ("the", "what") crowded the relevant entry out of the model's context.
+- Fix: `ORDER BY` now starts with the count of distinct query patterns matched (same LIKE terms as the filter), then confidence, then recency. Which entries match is unchanged; only their order (and therefore which survive `limit`) changes. No API or schema change.
+- Test: `test_query_ranks_entries_matching_more_terms_first` (fails without the change, verified via stash).
+- Suite: 102 passed (baseline 101, python3.12 venv outside the repo).
+- Not done: stop-words, term weighting, stemming, FTS5 — the keyword/substring limitation in ARCHITECTURE.md is narrowed, not closed.
+- Remaining F073 gap: per-service checks beyond model provider, memory store and audit log.
+- Decision: every pattern (including the whole-text one) counts 1, no extra weight for a whole-text match — the simplest rule that is easy to reason about and to replace with FTS5 later; reversible.

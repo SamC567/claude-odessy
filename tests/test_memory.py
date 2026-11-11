@@ -304,3 +304,23 @@ def test_read_paths_raise_typed_error_on_corrupt_database(memory_store: MemorySt
         memory_store.list_pending()
     with pytest.raises(MemoryError_):
         memory_store.count_by_status()
+
+
+def test_query_ranks_entries_matching_more_terms_first(memory_store: MemoryStore):
+    # A high-confidence entry sharing only a common word must not crowd the
+    # relevant, lower-confidence entry out of a small limit.
+    def approved(content: str, confidence: float) -> MemoryEntry:
+        entry = memory_store.submit_candidate(
+            MemoryEntry(content=content, source="user", confidence=confidence)
+        )
+        return memory_store.approve(entry.id, reviewer="tester")
+
+    for i in range(3):
+        approved(f"Remember the umbrella number {i}", 0.95)
+    relevant = approved("The capital of France is Paris", 0.4)
+
+    results = memory_store.query("What is the capital of France?", limit=3)
+
+    assert results[0].id == relevant.id
+    # Ties on relevance still fall back to confidence ordering.
+    assert [e.confidence for e in results[1:]] == [0.95, 0.95]

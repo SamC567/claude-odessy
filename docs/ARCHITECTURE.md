@@ -81,7 +81,10 @@ odysseus/
 - **Retrieval is keyword/substring matching**, not embeddings or FTS5.
   It is real and tested, just simple — SQLite FTS5 is available in this
   environment (verified) and is the natural next step; swapping it in
-  only touches `MemoryStore.query`.
+  only touches `MemoryStore.query`. Results are ranked by the number of
+  distinct query terms matched (then confidence, then recency); there is
+  still no stop-word list, term weighting or stemming, and a word matches
+  as a substring ("the" matches "other").
 - **No automatic fact-extraction from conversation.** `remember()` is
   invoked explicitly (CLI or future caller); nothing in Milestone A
   parses model output into candidate memories on its own. Doing that
@@ -94,6 +97,8 @@ odysseus/
   Ollama process. Verify this first against a real local install.
 
 ## Recent fixes
+
+- `MemoryStore.query` (F009) orders results by how many distinct query terms an entry matches before confidence/recency; previously ordering was confidence-only, so with the orchestrator's limit of 3 a high-confidence entry sharing one common word ("the") could push the relevant entry out of the context.
 
 - `OllamaProvider.health_check` (F003/F073) treats `"models": null` from `/api/tags` as "no models installed" (unhealthy, diagnostics WARNING) and a non-list `models` value as an unreadable list; previously either raised `TypeError` out of `health_check`, which must not raise, and diagnostics reported a crashed check (CRITICAL). Tested against a simulated server only.
 

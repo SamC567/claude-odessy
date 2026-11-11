@@ -221,7 +221,9 @@ class MemoryStore:
 
         Matches entries whose content contains any "significant" word
         (length >= 3) from ``text``, OR the whole ``text`` as a
-        substring. This is a deliberately simple retrieval strategy --
+        substring. Results are ordered by how many distinct query terms
+        they match, then confidence, then recency. This is a deliberately
+        simple retrieval strategy --
         good enough for Milestone A's "structured storage and
         retrieval" requirement -- and is the one place a smarter
         retriever (embeddings, FTS5, etc.) would plug in later without
@@ -249,14 +251,19 @@ class MemoryStore:
         # Unicode-aware case-insensitive match: SQLite's built-in LIKE only
         # folds ASCII, so fold both sides with str.casefold() (same rule the
         # duplicate check uses).
-        clauses = " OR ".join(["fold(content) LIKE ? ESCAPE '\\'"] * len(patterns))
-        params: list[object] = [MemoryStatus.APPROVED.value]
-        params.extend(f"%{_escape_like(p.casefold())}%" for p in patterns)
-        params.append(limit)
+        match = "fold(content) LIKE ? ESCAPE '\\'"
+        clauses = " OR ".join([match] * len(patterns))
+        # Relevance first: an entry matching more of the query's distinct
+        # terms outranks one matching fewer, so a high-confidence entry that
+        # only shares a common word (e.g. "the") cannot crowd the relevant
+        # one out of a small ``limit``. Confidence/recency break ties.
+        relevance = " + ".join([f"({match})"] * len(patterns))
+        likes = [f"%{_escape_like(p.casefold())}%" for p in sorted(patterns)]
+        params: list[object] = [MemoryStatus.APPROVED.value, *likes, *likes, limit]
         rows = self._read(
             f"SELECT * FROM memory_entries "
             f"WHERE status = ? AND ({clauses}) "
-            f"ORDER BY confidence DESC, created_at DESC LIMIT ?",
+            f"ORDER BY {relevance} DESC, confidence DESC, created_at DESC LIMIT ?",
             params,
             setup=lambda conn: conn.create_function(
                 "fold", 1, lambda v: v.casefold() if v else v, deterministic=True
