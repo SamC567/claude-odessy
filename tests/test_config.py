@@ -153,3 +153,25 @@ def test_audit_log_path_default_file_env_and_blank(tmp_path, monkeypatch):
         load_config(blank)
     monkeypatch.setenv("ODYSSEUS_AUDIT_LOG_PATH", "elsewhere/audit.log")
     assert load_config(custom).audit_log_path == "elsewhere/audit.log"
+
+
+def test_memory_context_limit_defaults_to_three_and_is_overridable(tmp_path, monkeypatch):
+    empty = tmp_path / "empty.yaml"
+    empty.write_text("")
+    assert load_config(empty).memory.context_limit == 3
+
+    path = tmp_path / "custom.yaml"
+    path.write_text("memory:\n  context_limit: 5\n")
+    assert load_config(path).memory.context_limit == 5
+
+    # Environment values arrive as strings and still have to validate.
+    monkeypatch.setenv("ODYSSEUS_MEMORY__CONTEXT_LIMIT", "0")
+    assert load_config(path).memory.context_limit == 0
+
+
+@pytest.mark.parametrize("value", ["-1", "51", "many", "true", "2.5", "2.0"])
+def test_memory_context_limit_rejects_unusable_values(tmp_path, value):
+    path = tmp_path / "bad.yaml"
+    path.write_text(f"memory:\n  context_limit: {value}\n")
+    with pytest.raises(ConfigError):
+        load_config(path)

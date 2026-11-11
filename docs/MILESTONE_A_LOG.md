@@ -578,3 +578,17 @@ Append-only log of scheduled-run changes.
 - Escaping is applied at the CLI only, not in `MemoryStore` or `MemoryEntry` (no rejection or stripping of control characters at submission). Reason: rejecting or altering stored content is a behaviour change to what can be remembered and to existing rows; changing only the display is the reversible option. Veto if control characters should instead be refused when a candidate is submitted.
 - Zero-width format characters are deliberately not escaped (they are part of ordinary Persian/Indic text and emoji sequences); only bidi controls are. Reversible by extending `_BIDI_CONTROLS`.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-11 — F001/F009 memory context limit is configurable
+
+- Gap: how many approved memories reach the model prompt was the literal `3` in `Orchestrator.__init__`'s default; `cli._build_orchestrator` never passed anything else, so no config file or environment variable could change it ("the orchestrator's limit of 3" in several earlier entries). A user with a larger local model could not let more facts in, and there was no way to run `chat` with memory kept out of the prompt short of retracting every entry.
+- Fix: `MemoryConfig.context_limit` (default 3, 0-50; a bool, a fractional number or an out-of-range value is a `ConfigError`), passed by the CLI to the existing `Orchestrator(memory_context_limit=...)` parameter. `0` means no approved memory is added to the prompt (`MemoryStore.query` already returns nothing for a limit of 0); memory stays stored and reviewable. Documented in `config/default.yaml` and `config/.env.example`. No interface or schema change; default behaviour unchanged.
+- Test: `test_memory_context_limit_defaults_to_three_and_is_overridable`, `test_memory_context_limit_rejects_unusable_values` (6 cases) in tests/test_config.py; `test_cli_chat_obeys_configured_memory_context_limit`, `test_cli_chat_memory_context_limit_zero_keeps_memory_out_of_the_prompt` in tests/test_cli.py. All fail without the change (verified by stashing `odysseus/` and `config/`: 9 failed, 135 passed).
+- Suite: 144 passed (baseline 135, python3.12 venv outside the repo, cloud sandbox).
+- Not done: the limit counts entries, not characters/tokens. `Orchestrator` does not validate a `memory_context_limit` passed directly in code. Not run on Windows.
+- Remaining gaps: F073 unchanged (no services beyond model providers, memory store and audit log are defined in Milestone A). F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- Upper bound of 50 and allowing 0 ("memory off for prompts") were chosen without asking. Reason: 0 is the privacy-conservative end and the default stays 3, so nothing changes unless the value is set; 50 is an arbitrary guard against a typo flooding the prompt. Reversible by editing the `Field` bounds; veto either.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.

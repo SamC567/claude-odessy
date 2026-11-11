@@ -64,7 +64,12 @@ def _build_orchestrator(config_path: str | None) -> tuple[Orchestrator, object]:
     identity = JarvisIdentity.from_config(config.identity)
     provider = build_provider(config.model, config.identity.allow_external_providers)
     memory = MemoryStore(config.memory.db_path, config.memory.auto_approve_threshold)
-    orchestrator = Orchestrator(identity=identity, provider=provider, memory=memory)
+    orchestrator = Orchestrator(
+        identity=identity,
+        provider=provider,
+        memory=memory,
+        memory_context_limit=config.memory.context_limit,
+    )
     return orchestrator, config
 
 

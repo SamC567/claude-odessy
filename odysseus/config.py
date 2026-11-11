@@ -85,6 +85,25 @@ class MemoryConfig(BaseModel):
         ge=0.0,
         le=1.0,
     )
+    context_limit: int = Field(
+        default=3,
+        description=(
+            "Maximum number of approved memories the orchestrator adds to the "
+            "model prompt for one interaction. 0 means approved memory is "
+            "never added to the prompt (it is still stored and reviewable)."
+        ),
+        ge=0,
+        le=50,
+    )
+
+    @field_validator("context_limit", mode="before")
+    @classmethod
+    def _context_limit_is_a_whole_number(cls, value: Any) -> Any:
+        # pydantic would otherwise read YAML ``true`` as 1 and ``2.0`` as 2;
+        # a count that is not written as a whole number is a mistake.
+        if isinstance(value, (bool, float)):
+            raise ValueError("memory.context_limit must be a whole number")
+        return value
 
 
 class HealthConfig(BaseModel):

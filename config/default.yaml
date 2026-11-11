@@ -18,6 +18,7 @@ model:
 memory:
   db_path: data/odysseus_memory.sqlite3
   auto_approve_threshold: null   # null = every candidate requires manual review
+  context_limit: 3               # max approved memories added to one model prompt (0 = none)
 
 health:
   disk_warn_percent: 85.0

@@ -375,3 +375,47 @@ def test_cli_memory_listings_leave_ordinary_text_untouched(tmp_path, capsys):
     capsys.readouterr()
     assert main(base + ["list-pending"]) == 0
     assert capsys.readouterr().out == f"[1] (0.50, user) {content}\n"
+
+
+def _approve_three_pizza_memories(base):
+    for n, fact in enumerate(("Sam likes pizza", "pizza night is Friday",
+                              "the pizza place closes at ten"), start=1):
+        main(base + ["memory", "remember", fact, "--source", f"note-{n}",
+                     "--confidence", "0.9"])
+        main(base + ["memory", "approve", str(n)])
+
+
+def test_cli_chat_obeys_configured_memory_context_limit(tmp_path, capsys):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        f"memory:\n  db_path: {tmp_path / 'mem.sqlite3'}\n  context_limit: 1\n"
+        f"model:\n  provider: echo\n"
+    )
+    base = ["--config", str(config_path)]
+    _approve_three_pizza_memories(base)
+    capsys.readouterr()
+
+    assert main(base + ["chat", "what about pizza?"]) == 0
+    err = capsys.readouterr().err
+    assert err.count("source=note-") == 1
+
+
+def test_cli_chat_memory_context_limit_zero_keeps_memory_out_of_the_prompt(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path)]
+    _approve_three_pizza_memories(base)
+    capsys.readouterr()
+
+    # Default limit: all three matching memories are cited.
+    assert main(base + ["chat", "what about pizza?"]) == 0
+    assert capsys.readouterr().err.count("source=note-") == 3
+
+    config_path.write_text(
+        f"memory:\n  db_path: {tmp_path / 'mem.sqlite3'}\n  context_limit: 0\n"
+        f"model:\n  provider: echo\n"
+    )
+    assert main(base + ["chat", "what about pizza?"]) == 0
+    assert "memory used" not in capsys.readouterr().err
+    # The memories themselves are untouched.
+    assert main(base + ["memory", "list-approved"]) == 0
+    assert capsys.readouterr().out.count("pizza") == 3
