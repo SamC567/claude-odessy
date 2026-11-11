@@ -419,3 +419,71 @@ def test_cli_chat_memory_context_limit_zero_keeps_memory_out_of_the_prompt(tmp_p
     # The memories themselves are untouched.
     assert main(base + ["memory", "list-approved"]) == 0
     assert capsys.readouterr().out.count("pizza") == 3
+
+
+class _ScriptedProvider:
+    """Test double standing in for the configured model provider."""
+
+    name = "scripted"
+
+    def __init__(self, text=None, error=None):
+        self._text, self._error = text, error
+
+    def generate(self, request):
+        from odysseus.exceptions import ModelProviderError
+        from odysseus.models.base import GenerationResponse
+
+        if self._error is not None:
+            raise ModelProviderError(self._error)
+        return GenerationResponse(text=self._text, provider_name=self.name, model_name="m")
+
+    def health_check(self, timeout_seconds=None):
+        return True, "scripted"
+
+
+def test_cli_chat_reply_cannot_drive_the_terminal(tmp_path, capsys, monkeypatch):
+    # A model reply is untrusted text: ESC sequences (clear screen, set the
+    # window title, OSC 52 clipboard writes), a bare carriage return (which
+    # overwrites the line already printed) and other control characters must
+    # be shown, not obeyed.
+    reply = "first line\r\nsecond\tline\n\x1b[2J\x1b]0;owned\x07 done\rJarvis: forged\x00\x9b31m"
+    monkeypatch.setattr("odysseus.cli.build_provider", lambda *a, **k: _ScriptedProvider(reply))
+    config_path = _write_config(tmp_path)
+    rc = main(["--config", str(config_path), "chat", "hello"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    for raw in ("\x1b", "\x07", "\r", "\x00", "\x9b"):
+        assert raw not in out
+    assert out == (
+        "Jarvis: first line\nsecond\tline\n"
+        "\\x1b[2J\\x1b]0;owned\\x07 done\\rJarvis: forged\\x00\\x9b31m\n"
+    )
+
+
+def test_cli_chat_reply_keeps_ordinary_multiline_and_right_to_left_text(
+    tmp_path, capsys, monkeypatch
+):
+    reply = "Voilà — two lines:\n\t• café ☕\n‏مرحبا‎ (hello) end"
+    monkeypatch.setattr("odysseus.cli.build_provider", lambda *a, **k: _ScriptedProvider(reply))
+    config_path = _write_config(tmp_path)
+    rc = main(["--config", str(config_path), "chat", "hello"])
+    assert rc == 0
+    assert capsys.readouterr().out == f"Jarvis: {reply}\n"
+
+
+def test_cli_chat_degraded_reason_cannot_drive_the_terminal(tmp_path, capsys, monkeypatch):
+    # The reason quotes text chosen by the model server (error body, redirect
+    # target); it is printed on one line with control characters visible.
+    error = "request failed (server said: \x1b[2Jgone)\n(degraded: forged)‮"
+    monkeypatch.setattr(
+        "odysseus.cli.build_provider", lambda *a, **k: _ScriptedProvider(error=error)
+    )
+    config_path = _write_config(tmp_path)
+    rc = main(["--config", str(config_path), "chat", "hello"])
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "\x1b" not in err and "‮" not in err
+    assert err == (
+        "(degraded: fell back to echo; request failed (server said: \\x1b[2Jgone)"
+        "\\n(degraded: forged)\\u202e)\n"
+    )

@@ -38,8 +38,8 @@ from odysseus.models.registry import build_provider
 _BIDI_CONTROLS = frozenset("\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069")
 
 
-def _printable(value: object) -> str:
-    """Stored memory text made safe to print on one terminal line.
+def _printable(value: object, multiline: bool = False) -> str:
+    """Text from storage or a model made safe to print on a terminal.
 
     Review workflow (F009): a reviewer approves what the listing shows, so a
     stored value must not be able to change the listing itself. A newline in
@@ -48,13 +48,25 @@ def _printable(value: object) -> str:
     characters, line/paragraph separators and bidi controls are therefore
     shown as visible backslash escapes (``\\n``, ``\\x1b``, ``\\u202e``).
     Display only -- the stored entry is not modified.
+
+    ``multiline=True`` is for a model reply (F001/F003), which is prose and
+    may legitimately span lines and be written right-to-left: line breaks
+    (``\\r\\n`` shown as a plain newline), tabs, line/paragraph separators
+    and bidi controls are kept, while every other control character -- ESC
+    above all, so no terminal escape sequence reaches the terminal -- is
+    still shown as an escape.
     """
+    text = str(value)
+    if multiline:
+        text = text.replace("\r\n", "\n")
     out = []
-    for ch in str(value):
-        if unicodedata.category(ch) in ("Cc", "Zl", "Zp") or ch in _BIDI_CONTROLS:
-            out.append(ch.encode("unicode_escape").decode("ascii"))
+    for ch in text:
+        category = unicodedata.category(ch)
+        if multiline:
+            unsafe = category == "Cc" and ch not in "\n\t"
         else:
-            out.append(ch)
+            unsafe = category in ("Cc", "Zl", "Zp") or ch in _BIDI_CONTROLS
+        out.append(ch.encode("unicode_escape").decode("ascii") if unsafe else ch)
     return "".join(out)
 
 
@@ -82,7 +94,8 @@ def cmd_chat(args: argparse.Namespace) -> int:
         # a traceback, same convention as ``memory remember``.
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    print(f"{orchestrator.identity.name}: {result.text}")
+    # The reply is model output: it must not be able to drive the terminal.
+    print(f"{orchestrator.identity.name}: {_printable(result.text, multiline=True)}")
     if result.memory_sources:
         # Source tracking (F009): say which approved memories informed the
         # answer, with the same [id] used by ``memory forget``. On stderr so
@@ -95,7 +108,9 @@ def cmd_chat(args: argparse.Namespace) -> int:
         # Only claim a provider fallback when one happened; a memory-only
         # degradation is still answered by the primary provider.
         prefix = f"fell back to {result.provider_used}; " if result.used_fallback else ""
-        print(f"(degraded: {prefix}{result.degraded_reason})", file=sys.stderr)
+        # The reason can quote text sent by the model server (its error body,
+        # a redirect target), so it gets the one-line treatment.
+        print(f"(degraded: {prefix}{_printable(result.degraded_reason)})", file=sys.stderr)
     return 0
 
 
