@@ -476,3 +476,23 @@ def test_find_duplicate_reports_what_submit_candidate_would_keep(memory_store: M
     assert memory_store.find_duplicate("Sam likes pizza") is None
     with pytest.raises(TypeError):
         memory_store.find_duplicate(None)
+
+
+def test_ids_and_limits_beyond_sqlite_integer_range_do_not_raise_overflow(memory_store):
+    """F009: SQLite integers are 64-bit; a larger id or limit must not escape
+    the store as a raw OverflowError (it is not a sqlite3.Error)."""
+    entry = memory_store.submit_candidate(
+        MemoryEntry(content="Sam likes pizza", source="user", confidence=0.8)
+    )
+    memory_store.approve(entry.id, "sam")
+
+    for too_big in (2**63, 10**30, -(2**63) - 1):
+        assert memory_store.get(too_big) is None
+        with pytest.raises(ReviewInboxError, match="No memory entry"):
+            memory_store.approve(too_big, "sam")
+        with pytest.raises(ReviewInboxError, match="No memory entry"):
+            memory_store.retract(too_big, "sam")
+
+    assert [e.id for e in memory_store.query("pizza", limit=10**30)] == [entry.id]
+    # The largest id SQLite can hold is still looked up normally.
+    assert memory_store.get(2**63 - 1) is None

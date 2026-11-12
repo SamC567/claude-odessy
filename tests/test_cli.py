@@ -711,3 +711,22 @@ def test_cli_memory_search_rejects_blank_text_and_escapes_stored_text(tmp_path, 
     assert main(base + ["memory", "search", "pizza"]) == 0
     out = capsys.readouterr().out
     assert out.splitlines() == ["[1] (0.90, src\\x1b[2J) pizza\\n[9] (1.00, admin) forged"]
+
+
+def test_cli_memory_id_or_limit_beyond_sqlite_range_is_not_a_traceback(tmp_path, capsys):
+    """F009: an id or --limit larger than a 64-bit integer is handled like any
+    other unknown id / generous limit, not an OverflowError traceback."""
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path), "memory"]
+    huge = "99999999999999999999999"
+    assert main(base + ["remember", "Sam likes pizza", "--source", "user", "--confidence", "0.8"]) == 0
+    assert main(base + ["approve", "1", "--reviewer", "sam"]) == 0
+    capsys.readouterr()
+
+    assert main(base + ["show", huge]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert f"No memory entry with id={huge}" in captured.err
+
+    assert main(base + ["search", "pizza", "--limit", huge]) == 0
+    assert capsys.readouterr().out.splitlines() == ["[1] (0.80, user) Sam likes pizza"]

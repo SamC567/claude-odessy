@@ -44,6 +44,13 @@ _PUNCT = ".,;:!?\"'()[]{}<>"
 _MAX_QUERY_TERMS = 50
 
 
+# SQLite stores integers in 64 bits. Binding a larger Python int raises a raw
+# ``OverflowError`` (not a ``sqlite3.Error``), which would escape this class's
+# typed errors, so ids and limits are checked against this range first.
+_SQLITE_MAX_INT = 2**63 - 1
+_SQLITE_MIN_INT = -(2**63)
+
+
 # English function words that say nothing about a query's topic. Without this,
 # almost any question ("What is the capital of France?") matched every approved
 # entry containing "the" or "what", so unrelated memories were injected into
@@ -272,6 +279,14 @@ class MemoryStore:
     # -- Reading -------------------------------------------------------
 
     def get(self, entry_id: int) -> MemoryEntry | None:
+        if (
+            isinstance(entry_id, int)
+            and not isinstance(entry_id, bool)
+            and not _SQLITE_MIN_INT <= entry_id <= _SQLITE_MAX_INT
+        ):
+            # No row can have an id SQLite cannot store; say "not found"
+            # (as for any other unknown id) instead of an OverflowError.
+            return None
         row = self._read(
             "SELECT * FROM memory_entries WHERE id = ?", (entry_id,), one=True
         )
@@ -325,6 +340,8 @@ class MemoryStore:
             # A blank query would otherwise match every approved entry, and a
             # negative LIMIT means "no limit" in SQLite.
             return []
+        # A limit beyond SQLite's integer range means "all of them".
+        limit = min(limit, _SQLITE_MAX_INT)
         # Strip surrounding punctuation so "pizza?" matches "pizza".
         # Stop words are not search terms on their own; the whole text is
         # still matched below, so a query that *is* a stop word ("the") or a

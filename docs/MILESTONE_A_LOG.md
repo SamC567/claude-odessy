@@ -760,3 +760,18 @@ Append-only log of scheduled-run changes.
 - A search is not written to the audit log. Reason: it is a read the user typed, like the `list-*` and `show` commands, which are not audited either; `chat` still audits `orchestrator.memory_used`. Veto if every retrieval should leave a record.
 - The default limit follows `memory.context_limit` instead of the store's own default of 20. Reason: the main use is "what would chat recall for this"; `--limit` covers the rest. Reversible in the CLI alone.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-12 — F009 an id or limit beyond SQLite's integer range is not a crash
+
+- Gap: SQLite integers are 64-bit, and Python's `sqlite3` raises `OverflowError` when asked to bind a larger int. That is not a `sqlite3.Error`, so it passed straight through `MemoryStore._read` and out of the store, contrary to the documented rule that storage failures surface as `MemoryError_` / `ReviewInboxError`. Reproduced before the change: `memory show 99999999999999999999999`, `memory approve 99999999999999999999999 --reviewer x` and `memory search pizza --limit 99999999999999999999999` each ended in a traceback (`OverflowError: Python int too large to convert to SQLite INTEGER`). No test covered it.
+- Fix: in `odysseus/memory/store.py`, `get` returns `None` for an int id outside the signed 64-bit range (no such row can exist), which also makes `approve` / `reject` / `retract` raise their usual `ReviewInboxError("No memory entry with id=...")` because they look the entry up first; `query` clamps `limit` to the largest SQLite integer (a larger limit means "all matches"). No CLI, schema, config or interface change. docs/ARCHITECTURE.md "Recent fixes" updated.
+- Test: `test_ids_and_limits_beyond_sqlite_integer_range_do_not_raise_overflow` (tests/test_memory.py), `test_cli_memory_id_or_limit_beyond_sqlite_range_is_not_a_traceback` (tests/test_cli.py). Both fail without the change (verified by stashing `odysseus/`: 2 failed, 192 passed).
+- Suite: 194 passed (baseline 192, python3.12 venv outside the repo, cloud sandbox).
+- Smoke: against a scratch database and audit log outside the repo, `memory show`, `memory approve` and `memory forget` with the id above printed `error: No memory entry with id=...`, exit 2; `memory search pizza --limit 99999999999999999999999` printed the one approved entry, exit 0. The scratch files were deleted; nothing was written inside the repo.
+- Not done: `get` with a non-int id (a string, a float) is unchanged and still returns `None` or whatever SQLite's comparison gives; only the out-of-range int case was reproduced and fixed. `memory.context_limit` is already capped at 50 by config, so `chat` was not affected. Not run on Windows. Carried over: two processes submitting the same new fact at the same moment can both store it; no command to repair, quarantine or export an unreadable row; `memory search` does not say why an entry ranked where it did.
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- An out-of-range id is reported as "not found", not as a separate "invalid id" error. Reason: it is true (no such row can exist), it matches what every other unknown id already does, and it needs no new error path in callers. Reversible in `MemoryStore.get` alone; veto if such an id should be rejected with its own message.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
