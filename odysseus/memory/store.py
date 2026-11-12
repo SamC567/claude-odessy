@@ -633,6 +633,69 @@ class MemoryStore:
         )
         return {**dict(zip(_ENTRY_COLUMNS, values)), "quarantined_at": now, "quarantined_by": reviewer}
 
+    def restore_quarantined(self, entry_id: int, reviewer: str) -> dict[str, object]:
+        """Put one quarantined row back into memory, unchanged (F009).
+
+        The reverse of ``quarantine``, for a row that was moved aside by
+        mistake or is to be dealt with another way: the row leaves
+        ``memory_quarantine`` and returns to ``memory_entries`` under its
+        original id with every stored value as it was, in one transaction.
+        Nothing is repaired or re-reviewed: the stored status is kept, so a
+        row that was unreadable is unreadable again (``health`` reports it)
+        and no entry becomes APPROVED that was not stored as approved before.
+        Returns the restored values. ``ReviewInboxError`` if no such row is
+        quarantined, or if its id is in use in memory again.
+        """
+        if not isinstance(reviewer, str) or not reviewer.strip():
+            raise ReviewInboxError("A non-empty reviewer is required to restore a quarantined entry")
+        reviewer = reviewer.strip()
+        if (
+            isinstance(entry_id, bool)
+            or not isinstance(entry_id, int)
+            or not _SQLITE_MIN_INT <= entry_id <= _SQLITE_MAX_INT
+        ):
+            raise ReviewInboxError(f"No quarantined entry with id={entry_id}")
+        with closing(self._connect()) as conn:
+            try:
+                # One write transaction, as in ``quarantine``: a failure
+                # part-way leaves the row in quarantine (rollback on close).
+                conn.execute("BEGIN IMMEDIATE")
+                exists = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_quarantine'"
+                ).fetchone()
+                row = exists and conn.execute(
+                    "SELECT * FROM memory_quarantine WHERE id = ?", (entry_id,)
+                ).fetchone()
+                if not row:
+                    raise ReviewInboxError(f"No quarantined entry with id={entry_id}")
+                if conn.execute(
+                    "SELECT 1 FROM memory_entries WHERE id = ?", (entry_id,)
+                ).fetchone():
+                    raise ReviewInboxError(
+                        f"Cannot restore quarantined entry {entry_id}: "
+                        f"that id is in use in memory again"
+                    )
+                values = [row[name] for name in _ENTRY_COLUMNS]
+                conn.execute(
+                    f"INSERT INTO memory_entries ({', '.join(_ENTRY_COLUMNS)}) "
+                    f"VALUES ({', '.join('?' * len(_ENTRY_COLUMNS))})",
+                    values,
+                )
+                conn.execute("DELETE FROM memory_quarantine WHERE id = ?", (entry_id,))
+                conn.commit()
+            except sqlite3.Error as exc:
+                raise MemoryError_(
+                    f"Could not restore quarantined memory entry {entry_id}: {exc}"
+                ) from exc
+        audit(
+            "memory.restore_quarantined",
+            id=entry_id,
+            reviewer=reviewer,
+            stored_status=row["status"],
+            quarantined_by=row["quarantined_by"],
+        )
+        return dict(zip(_ENTRY_COLUMNS, values))
+
     def list_quarantined(self) -> list[dict[str, object]]:
         """Rows moved aside by ``quarantine``, by id, values exactly as stored (F009).
 

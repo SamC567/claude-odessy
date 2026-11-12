@@ -991,3 +991,42 @@ def test_cli_memory_list_quarantined_cannot_forge_lines_or_drive_the_terminal(tm
     assert [line for line in lines if not line.startswith("  ")] == [
         "[1] quarantined (raw stored values, not used in answers)"
     ]
+
+
+def test_cli_memory_restore_quarantined_undoes_a_quarantine(tmp_path, capsys):
+    """F009: a quarantine made by mistake can be undone from the CLI."""
+    config_path = _corrupt_row(tmp_path, "status", "archived")
+    base = ["--config", str(config_path), "memory"]
+    assert main(base + ["quarantine", "1", "--reviewer", "alice"]) == 0
+    capsys.readouterr()
+
+    assert main(base + ["restore-quarantined", "1", "--reviewer", "alice"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "Restored [1] from quarantine (back in memory with its stored values unchanged; "
+        "not repaired, see 'health')"
+    ]
+
+    assert main(base + ["list-quarantined"]) == 0
+    assert capsys.readouterr().out.splitlines() == ["No quarantined entries."]
+    assert main(base + ["show", "1", "--raw"]) == 0
+    assert "'archived'" in capsys.readouterr().out
+    assert main(["--config", str(config_path), "health"]) in (0, 1)
+    out = capsys.readouterr().out
+    assert "cannot be read (id 1)" in out and "quarantined=" not in out
+
+
+def test_cli_memory_restore_quarantined_refuses_an_entry_that_is_not_quarantined(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path), "memory"]
+    assert main(base + ["remember", "Sam likes pizza", "--source", "user", "--confidence", "0.8"]) == 0
+    capsys.readouterr()
+
+    for entry_id in ("1", "99999999999999999999999"):
+        assert main(base + ["restore-quarantined", entry_id]) == 2
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err.strip() == f"error: No quarantined entry with id={entry_id}"
+
+    assert main(base + ["list-pending"]) == 0
+    assert "[1]" in capsys.readouterr().out

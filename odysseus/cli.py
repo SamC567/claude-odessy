@@ -13,6 +13,7 @@ Usage:
     python -m odysseus.cli memory forget <id>
     python -m odysseus.cli memory quarantine <id>
     python -m odysseus.cli memory list-quarantined
+    python -m odysseus.cli memory restore-quarantined <id>
     python -m odysseus.cli memory remember "fact" --source user --confidence 0.8
     python -m odysseus.cli config show
 """
@@ -429,6 +430,18 @@ def cmd_memory_list_quarantined(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_memory_restore_quarantined(args: argparse.Namespace) -> int:
+    # F009: undoes ``memory quarantine``. The row goes back exactly as it was
+    # stored, so one that could not be read is reported by ``health`` again.
+    orchestrator, _ = _build_orchestrator(args.config)
+    restored = orchestrator.memory.restore_quarantined(args.entry_id, reviewer=args.reviewer)
+    print(
+        f"Restored [{restored['id']}] from quarantine (back in memory with its stored "
+        f"values unchanged; not repaired, see 'health')"
+    )
+    return 0
+
+
 def cmd_config_show(args: argparse.Namespace) -> int:
     _, config = _build_orchestrator(args.config)
     print(config.model_dump_json(indent=2))
@@ -533,6 +546,14 @@ def build_parser() -> argparse.ArgumentParser:
         "list-quarantined", help="List quarantined entries with their values as stored"
     )
     list_quarantined.set_defaults(func=cmd_memory_list_quarantined)
+
+    restore_quarantined = memory_sub.add_parser(
+        "restore-quarantined",
+        help="Put a quarantined entry back into memory, unchanged (undoes 'quarantine')",
+    )
+    restore_quarantined.add_argument("entry_id", type=int)
+    restore_quarantined.add_argument("--reviewer", default="cli-user")
+    restore_quarantined.set_defaults(func=cmd_memory_restore_quarantined)
 
     config_cmd = sub.add_parser("config", help="Inspect effective configuration")
     config_sub = config_cmd.add_subparsers(dest="config_command", required=True)
