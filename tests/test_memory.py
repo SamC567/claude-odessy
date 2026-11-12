@@ -458,3 +458,21 @@ def test_tags_column_that_is_not_a_json_list_is_a_corrupt_row(memory_store: Memo
     assert memory_store.unreadable_entry_ids() == [bad.id]
     # A stored JSON list still decodes as before.
     assert memory_store.get(good.id).tags == ("drink",)
+
+
+def test_find_duplicate_reports_what_submit_candidate_would_keep(memory_store: MemoryStore):
+    assert memory_store.find_duplicate("Sam likes pizza") is None
+    first = memory_store.submit_candidate(
+        MemoryEntry(content="Sam likes pizza", source="note", confidence=0.5)
+    )
+    found = memory_store.find_duplicate("  sam LIKES   pizza ")
+    assert found is not None and found.id == first.id
+    assert memory_store.find_duplicate("Sam likes pasta") is None
+    assert memory_store.find_duplicate("   ") is None
+    # Read-only: looking does not store anything.
+    assert memory_store.count_by_status() == {"pending": 1}
+    # A rejected entry does not count, so the fact can be proposed again.
+    memory_store.reject(first.id, reviewer="t")
+    assert memory_store.find_duplicate("Sam likes pizza") is None
+    with pytest.raises(TypeError):
+        memory_store.find_duplicate(None)

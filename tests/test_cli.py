@@ -573,3 +573,48 @@ def test_cli_multiline_config_error_stays_readable(tmp_path, capsys):
     assert lines[0].startswith("error: Invalid configuration:")
     assert any("log_level must be one of" in line for line in lines[1:])
     assert "\\n" not in err
+
+
+def test_cli_memory_remember_says_when_the_fact_is_already_stored(tmp_path, capsys):
+    # F009 source tracking: a duplicate submission is not stored, so the CLI
+    # must not report it as "Submitted" and must say its provenance was dropped.
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path), "memory"]
+    assert main(base + ["remember", "Sam likes pizza", "--source", "user-note",
+                        "--confidence", "0.9"]) == 0
+    assert "Submitted as entry [1] with status=pending" in capsys.readouterr().out
+    main(base + ["approve", "1"])
+    capsys.readouterr()
+
+    rc = main(base + ["remember", "  sam LIKES   pizza ", "--source", "web\npage",
+                      "--confidence", "0.2", "--tags", "food"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Submitted" not in out
+    assert "Already stored as entry [1] with status=approved" in out
+    # The kept entry's provenance is shown, not the one just typed.
+    assert "source=user-note, confidence=0.90" in out
+    assert "not stored with it" in out
+    assert len(out.splitlines()) == 1
+
+    main(base + ["show", "1"])
+    shown = capsys.readouterr().out
+    assert "source:     user-note" in shown and "tags:       -" in shown
+
+    # A retracted fact can be proposed again and is reported as new.
+    main(base + ["forget", "1"])
+    capsys.readouterr()
+    assert main(base + ["remember", "Sam likes pizza", "--source", "user-note",
+                        "--confidence", "0.9"]) == 0
+    assert "Submitted as entry [2] with status=pending" in capsys.readouterr().out
+
+
+def test_cli_memory_remember_existing_source_cannot_drive_the_terminal(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path), "memory"]
+    main(base + ["remember", "a fact", "--source", "web\n[9] forged\x1b[2J", "--confidence", "0.5"])
+    capsys.readouterr()
+    main(base + ["remember", "a fact", "--source", "x", "--confidence", "0.5"])
+    out = capsys.readouterr().out
+    assert "\x1b" not in out and len(out.splitlines()) == 1
+    assert "Already stored as entry [1]" in out

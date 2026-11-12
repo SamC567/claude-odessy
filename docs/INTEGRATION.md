@@ -34,7 +34,7 @@ python -m pytest
 | Interface | File | Contract |
 |---|---|---|
 | `ModelProvider` | `odysseus/models/base.py` | `generate(GenerationRequest) -> GenerationResponse`, `health_check() -> (bool, str)`. Implement this for any new backend (the original repo's existing model client, a cloud model, etc.) instead of changing the orchestrator. |
-| `MemoryStore` | `odysseus/memory/store.py` | `submit_candidate`, `approve`, `reject`, `query`, `list_pending`, `get`. Backed by SQLite here; the API is intentionally storage-agnostic if the original repo already has a memory backend to adapt to. |
+| `MemoryStore` | `odysseus/memory/store.py` | `submit_candidate`, `find_duplicate`, `approve`, `reject`, `query`, `list_pending`, `get`. Backed by SQLite here; the API is intentionally storage-agnostic if the original repo already has a memory backend to adapt to. |
 | `Orchestrator` | `odysseus/core/orchestrator.py` | `respond(prompt) -> InteractionResult`, `remember(content, source, confidence, tags)`. This is the integration seam for a future chat/voice/API front-end. |
 | `OdysseusConfig` | `odysseus/config.py` | pydantic model; `load_config(path, overrides)`. |
 

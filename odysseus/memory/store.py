@@ -257,6 +257,18 @@ class MemoryStore:
                 return _row_to_entry(row)
         return None
 
+    def find_duplicate(self, content: str) -> MemoryEntry | None:
+        """The PENDING/APPROVED entry ``submit_candidate`` would return instead of
+        storing ``content`` again, or ``None`` if it would be stored as new (F009).
+
+        Read-only. Lets a caller tell "kept the existing entry" apart from
+        "stored a new one": in the first case the source, confidence and tags
+        of the new submission are not stored (the audit log notes its source only).
+        """
+        if not isinstance(content, str):
+            raise TypeError(f"content must be a string, got {type(content).__name__}")
+        return self._find_live_duplicate(content)
+
     # -- Reading -------------------------------------------------------
 
     def get(self, entry_id: int) -> MemoryEntry | None:

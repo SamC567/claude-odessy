@@ -238,6 +238,12 @@ def cmd_memory_show(args: argparse.Namespace) -> int:
 
 def cmd_memory_remember(args: argparse.Namespace) -> int:
     orchestrator, _ = _build_orchestrator(args.config)
+    # Source tracking (F009): the store keeps an existing pending/approved
+    # entry with the same content instead of storing it twice. Look first, so
+    # the outcome can be reported as what it is. ``getattr``: a store without
+    # the lookup is reported as before.
+    find_duplicate = getattr(orchestrator.memory, "find_duplicate", None)
+    existing = find_duplicate(args.content) if find_duplicate is not None else None
     try:
         entry = orchestrator.remember(
             content=args.content,
@@ -250,6 +256,17 @@ def cmd_memory_remember(args: argparse.Namespace) -> int:
         # report cleanly instead of a traceback.
         _print_error(exc)
         return 2
+    if existing is not None and entry.id == existing.id:
+        # Not "Submitted ... status=approved": that reads as if this
+        # submission had been stored (and auto-approved). Nothing was stored,
+        # and the provenance given on this command line is not kept on the entry
+        # (only the audit log notes the duplicate's source).
+        print(
+            f"Already stored as entry [{entry.id}] with status={entry.status.value} "
+            f"(source={_printable(entry.source)}, confidence={entry.confidence:.2f}); "
+            "not added again. The source, confidence and tags given here were not stored with it."
+        )
+        return 0
     print(f"Submitted as entry [{entry.id}] with status={entry.status.value}")
     return 0
 
