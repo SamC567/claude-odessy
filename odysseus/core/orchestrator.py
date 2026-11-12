@@ -45,7 +45,8 @@ class Orchestrator:
     """Coordinates identity, a model provider, and persistent memory.
 
     ``fallback_provider`` is used automatically whenever ``provider``
-    raises ``ModelProviderError`` -- this is the concrete mechanism
+    raises ``ModelProviderError`` (or, against the interface contract, any
+    other ``Exception``) -- this is the concrete mechanism
     behind "the system must remain usable when optional services or
     external models are unavailable". It defaults to the dependency-free
     ``EchoProvider`` so that guarantee holds even with no extra config.
@@ -107,6 +108,28 @@ class Orchestrator:
                 "orchestrator.provider_failed",
                 provider=self.provider.name,
                 error=str(exc),
+            )
+            response = self.fallback_provider.generate(request)
+            audit("orchestrator.generate", provider=self.fallback_provider.name, degraded=True)
+        except Exception as exc:  # noqa: BLE001 - see comment
+            # The interface says a provider raises only ModelProviderError.
+            # A provider that breaks that (a bug in a new or third-party
+            # backend) must not take the interaction down with it: degrade
+            # the same way, but say in the reason and the audit trail that
+            # this was an unexpected error, not an ordinary outage.
+            # KeyboardInterrupt/SystemExit are not Exception and still pass.
+            degraded = True
+            used_fallback = True
+            failure = (
+                f"provider {self.provider.name!r} raised an unexpected "
+                f"{type(exc).__name__}: {exc}"
+            )
+            degraded_reason = f"{memory_failure}; {failure}" if memory_failure else failure
+            audit(
+                "orchestrator.provider_failed",
+                provider=self.provider.name,
+                error=str(exc),
+                unexpected=type(exc).__name__,
             )
             response = self.fallback_provider.generate(request)
             audit("orchestrator.generate", provider=self.fallback_provider.name, degraded=True)

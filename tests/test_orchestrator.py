@@ -135,3 +135,67 @@ def test_used_fallback_distinguishes_provider_fallback_from_memory_degradation(
     assert memory_only.degraded is True
     assert memory_only.provider_used == "canned"
     assert memory_only.used_fallback is False
+
+
+class _BrokenContractProvider(ModelProvider):
+    """Raises something other than ModelProviderError, against the interface."""
+
+    name = "broken-contract"
+
+    def generate(self, request: GenerationRequest) -> GenerationResponse:
+        raise KeyError("choices")
+
+    def health_check(self, timeout_seconds=None):
+        return True, "claims to be fine"
+
+
+def test_respond_falls_back_when_provider_raises_an_unexpected_exception(
+    identity, memory_store, caplog
+):
+    import logging
+
+    from odysseus.logging_setup import AUDIT_LOGGER_NAME
+
+    audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
+    audit_logger.addHandler(caplog.handler)
+    try:
+        with caplog.at_level(logging.INFO, logger=AUDIT_LOGGER_NAME):
+            result = Orchestrator(identity, _BrokenContractProvider(), memory_store).respond("hello")
+    finally:
+        audit_logger.removeHandler(caplog.handler)
+
+    assert result.degraded is True
+    assert result.used_fallback is True
+    assert result.provider_used == "echo"
+    assert result.is_live_model is False
+    # The reason names the provider and the exception type, so it cannot be
+    # mistaken for an ordinary outage.
+    assert "broken-contract" in result.degraded_reason
+    assert "unexpected KeyError" in result.degraded_reason
+    failed = [r.getMessage() for r in caplog.records if "orchestrator.provider_failed" in r.getMessage()]
+    assert len(failed) == 1
+    assert "unexpected='KeyError'" in failed[0]
+
+
+def test_unexpected_provider_exception_keeps_the_memory_failure_in_the_reason(
+    identity, memory_store
+):
+    from odysseus.exceptions import MemoryError_
+
+    def boom(*args, **kwargs):
+        raise MemoryError_("disk I/O error")
+
+    memory_store.query = boom
+    result = Orchestrator(identity, _BrokenContractProvider(), memory_store).respond("hello")
+    assert result.used_fallback is True
+    assert "memory unavailable" in result.degraded_reason
+    assert "unexpected KeyError" in result.degraded_reason
+
+
+def test_keyboard_interrupt_from_a_provider_is_not_swallowed(identity, memory_store):
+    class _Interrupted(_BrokenContractProvider):
+        def generate(self, request):
+            raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        Orchestrator(identity, _Interrupted(), memory_store).respond("hello")
