@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import inspect
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -105,6 +106,25 @@ def check_disk_space(path: Path, warn_percent: float, critical_percent: float) -
 REQUIRED_DEPENDENCIES = ("pydantic", "PyYAML", "requests")
 # Supported major versions, mirroring the ranges pinned in requirements.txt.
 SUPPORTED_MAJOR_VERSIONS = {"pydantic": 2, "PyYAML": 6, "requests": 2}
+# Lowest supported (major, minor), the ">=" half of the same ranges. A test
+# compares both tables with requirements.txt so they cannot drift apart.
+MINIMUM_VERSIONS = {"pydantic": (2, 0), "PyYAML": (6, 0), "requests": (2, 28)}
+
+
+def _major_minor(version: str) -> tuple[int, int] | None:
+    """``(major, minor)`` of a version string, or None if it cannot be told.
+
+    "2.28.0rc1" -> (2, 28) and "6" -> (6, 0). Anything else that does not
+    start with ``N.N`` ("2.x", "1!2.0", "unknown") gives None, so an unusual
+    version string is left uncompared instead of being misjudged.
+    """
+    match = re.match(r"(\d+)(?:\.(\d+))?(.*)", version, re.DOTALL)
+    if match is None:
+        return None
+    major, minor, rest = match.groups()
+    if minor is None:
+        return (int(major), 0) if not rest else None
+    return int(major), int(minor)
 
 
 def check_dependencies(required: tuple[str, ...] = REQUIRED_DEPENDENCIES) -> CheckResult:
@@ -115,6 +135,7 @@ def check_dependencies(required: tuple[str, ...] = REQUIRED_DEPENDENCIES) -> Che
     versions: list[str] = []
     missing: list[str] = []
     unsupported: list[str] = []
+    too_old: list[str] = []
     for name in required:
         try:
             version = metadata.version(name)
@@ -126,16 +147,24 @@ def check_dependencies(required: tuple[str, ...] = REQUIRED_DEPENDENCIES) -> Che
         major = version.split(".")[0]
         if want is not None and major.isdigit() and int(major) != want:
             unsupported.append(f"{name}=={version} (need {want}.x)")
+            continue
+        # Right major version, but older than the lowest release the project
+        # is declared to work with (e.g. requests 2.20 against ">=2.28").
+        floor = MINIMUM_VERSIONS.get(name)
+        found = _major_minor(version)
+        if floor is not None and found is not None and found < floor:
+            too_old.append(f"{name}=={version} (need >={floor[0]}.{floor[1]})")
     if missing:
         return CheckResult(
             "dependencies", CheckStatus.CRITICAL, "missing: " + ", ".join(missing)
         )
+    problems: list[str] = []
     if unsupported:
-        return CheckResult(
-            "dependencies",
-            CheckStatus.WARNING,
-            "unsupported major version: " + ", ".join(unsupported),
-        )
+        problems.append("unsupported major version: " + ", ".join(unsupported))
+    if too_old:
+        problems.append("older than the supported minimum: " + ", ".join(too_old))
+    if problems:
+        return CheckResult("dependencies", CheckStatus.WARNING, "; ".join(problems))
     return CheckResult("dependencies", CheckStatus.OK, ", ".join(versions))
 
 

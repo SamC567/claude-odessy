@@ -261,6 +261,65 @@ def test_dependencies_check_warns_on_unsupported_major_version(monkeypatch):
     assert "pydantic==1.10.0" in res.detail
 
 
+def test_dependencies_check_warns_below_the_supported_minimum(monkeypatch):
+    from importlib import metadata
+
+    from odysseus.health import diagnostics
+
+    real = metadata.version
+    installed = {"requests": "2.20.1"}
+    monkeypatch.setattr(
+        diagnostics.metadata, "version", lambda n: installed.get(n) or real(n)
+    )
+    res = diagnostics.check_dependencies(("requests", "pytest"))
+    assert res.status == CheckStatus.WARNING
+    assert "requests==2.20.1 (need >=2.28)" in res.detail
+    assert "older than the supported minimum" in res.detail
+
+    # The lowest supported release itself, and a pre-release of it, are fine.
+    for version in ("2.28", "2.28.0", "2.28.0rc1", "2.31.0"):
+        installed["requests"] = version
+        assert diagnostics.check_dependencies(("requests",)).status == CheckStatus.OK, version
+
+    # A version that cannot be read as major.minor is reported, not judged.
+    installed["requests"] = "2.x"
+    odd = diagnostics.check_dependencies(("requests",))
+    assert odd.status == CheckStatus.OK
+    assert "requests==2.x" in odd.detail
+
+
+def test_dependencies_check_reports_a_wrong_major_and_a_too_old_minor_together(monkeypatch):
+    from odysseus.health import diagnostics
+
+    installed = {"pydantic": "1.10.0", "requests": "2.5.0", "PyYAML": "6.0.1"}
+    monkeypatch.setattr(diagnostics.metadata, "version", lambda n: installed[n])
+    res = diagnostics.check_dependencies()
+    assert res.status == CheckStatus.WARNING
+    assert "pydantic==1.10.0 (need 2.x)" in res.detail
+    assert "requests==2.5.0 (need >=2.28)" in res.detail
+    # A wrong major version is named once, not also as "too old".
+    assert res.detail.count("pydantic==") == 1
+
+
+def test_dependency_version_tables_agree_with_requirements_txt():
+    import re
+
+    from odysseus.health import diagnostics
+
+    text = (Path(__file__).resolve().parent.parent / "requirements.txt").read_text()
+    majors, minimums = {}, {}
+    for line in text.splitlines():
+        match = re.fullmatch(r"([A-Za-z0-9_.-]+)>=(\d+)\.(\d+),<(\d+)\.0", line.strip())
+        if match:
+            name, low_major, low_minor, below = match.groups()
+            assert int(below) == int(low_major) + 1, line
+            majors[name] = int(low_major)
+            minimums[name] = (int(low_major), int(low_minor))
+    assert set(majors) == set(diagnostics.REQUIRED_DEPENDENCIES)
+    assert majors == diagnostics.SUPPORTED_MAJOR_VERSIONS
+    assert minimums == diagnostics.MINIMUM_VERSIONS
+
+
 def test_audit_log_check_warns_when_not_writable_and_ok_otherwise(tmp_path, monkeypatch):
     import os
 
