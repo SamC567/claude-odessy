@@ -570,3 +570,73 @@ def test_raw_row_returns_stored_values_of_a_row_get_refuses(memory_store: Memory
 def test_raw_row_unknown_or_out_of_range_id_is_none(memory_store: MemoryStore):
     assert memory_store.raw_row(12345) is None
     assert memory_store.raw_row(2**70) is None
+
+
+def _approved(store: MemoryStore, content: str, confidence: float = 0.5, tags=()) -> MemoryEntry:
+    stored = store.submit_candidate(
+        MemoryEntry(content=content, source="user", confidence=confidence, tags=tags)
+    )
+    return store.approve(stored.id, "sam")
+
+
+def test_search_terms_are_the_whole_text_then_its_significant_words(memory_store: MemoryStore):
+    """F009: the terms retrieval searches for can be read, not only inferred."""
+    assert memory_store.search_terms("What pizza, with OLIVES and pizza?") == (
+        "What pizza, with OLIVES and pizza?",
+        "pizza",
+        "OLIVES",
+    )
+    # A one-word query is one term, not the word twice.
+    assert memory_store.search_terms("pizza") == ("pizza",)
+    assert memory_store.search_terms("pizza?") == ("pizza?", "pizza")
+    # A blank text retrieves nothing, so it has no terms.
+    assert memory_store.search_terms("   ") == ()
+    with pytest.raises(TypeError):
+        memory_store.search_terms(None)
+
+
+def test_matched_terms_account_for_the_order_query_returns(memory_store: MemoryStore):
+    """F009: an entry's rank is explained by how many search terms it contains."""
+    one = _approved(memory_store, "Sam likes pizza", confidence=0.9)
+    two = _approved(memory_store, "Pizza with Ölives on Friday", confidence=0.2)
+    tagged = _approved(memory_store, "Tom is a cat", confidence=0.5, tags=("ÖLIVES",))
+    text = "pizza ölives?"
+
+    results = memory_store.query(text)
+    # Two terms beat one; confidence orders the two single-term entries.
+    assert [e.id for e in results] == [two.id, one.id, tagged.id]
+    counts = [len(memory_store.matched_terms(text, e)) for e in results]
+    # Every returned entry matched something, and more matches never rank lower.
+    assert all(counts) and counts == sorted(counts, reverse=True)
+
+    # Case-insensitive (non-ASCII too), in query order, tags included.
+    assert memory_store.matched_terms(text, two) == ("pizza", "ölives")
+    assert memory_store.matched_terms(text, tagged) == ("ölives",)
+    assert memory_store.matched_terms("Sam likes pizza", one) == (
+        "Sam likes pizza",
+        "Sam",
+        "likes",
+        "pizza",
+    )
+    # Nothing in common, a blank text, and a phrase that would only match
+    # across the content/tag boundary all explain as "no terms".
+    assert memory_store.matched_terms("umbrella", one) == ()
+    assert memory_store.matched_terms("  ", one) == ()
+    assert memory_store.matched_terms("cat ÖLIVES", tagged) == ("cat", "ÖLIVES")
+    with pytest.raises(TypeError):
+        memory_store.matched_terms("pizza", "Sam likes pizza")
+
+
+def test_matched_terms_agree_with_query_on_what_matches(memory_store: MemoryStore):
+    """F009: the explanation and retrieval share one rule -- an approved
+    entry is returned by ``query`` exactly when it has a matched term."""
+    entries = [
+        _approved(memory_store, "100% cotton shirts"),
+        _approved(memory_store, "snake_case is preferred"),
+        _approved(memory_store, "The umbrella is in the hall"),
+        _approved(memory_store, "category theory notes", tags=("maths",)),
+    ]
+    for text in ("100%", "snake_case", "the", "the umbrella", "cat maths", "what is it", "x_y"):
+        returned = {e.id for e in memory_store.query(text)}
+        explained = {e.id for e in entries if memory_store.matched_terms(text, e)}
+        assert returned == explained, text

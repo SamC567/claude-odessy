@@ -97,6 +97,33 @@ def _searchable_text(content: str | None, tags_json: str | None) -> str:
     return _FIELD_SEP.join(parts).casefold()
 
 
+def _query_terms(text: str) -> tuple[str, ...]:
+    """The distinct terms ``query`` searches for: the whole text, then its words.
+
+    The whole ``text`` comes first; the "significant" words follow in the
+    order typed (surrounding punctuation stripped, at least three letters,
+    not a stop word, at most ``_MAX_QUERY_TERMS`` of them). A word identical
+    to the whole text is not listed twice. One place for this rule, so
+    retrieval and its explanation (``MemoryStore.matched_terms``) cannot
+    drift apart.
+    """
+    # Strip surrounding punctuation so "pizza?" matches "pizza".
+    # Stop words are not search terms on their own; the whole text is
+    # still a term, so a query that *is* a stop word ("the") or a
+    # phrase containing one ("the umbrella") keeps working.
+    words = [
+        w
+        for w in (t.strip(_PUNCT) for t in text.split())
+        if len(w) >= 3 and w.casefold() not in _STOP_WORDS
+    ]
+    # Bound the OR-chain: SQLite rejects expression trees deeper than 1000,
+    # so an unbounded query (e.g. a pasted document) would raise a raw
+    # sqlite3.OperationalError. Keep the whole text plus the first
+    # distinct words (order-preserving, deterministic).
+    distinct_words = list(dict.fromkeys(words))[:_MAX_QUERY_TERMS]
+    return tuple(dict.fromkeys([text, *distinct_words]))
+
+
 def _decode_tags(tags_json: str | None) -> tuple[str, ...]:
     """Decode the stored ``tags`` column, which this store only ever writes as a JSON list.
 
@@ -374,21 +401,7 @@ class MemoryStore:
             return []
         # A limit beyond SQLite's integer range means "all of them".
         limit = min(limit, _SQLITE_MAX_INT)
-        # Strip surrounding punctuation so "pizza?" matches "pizza".
-        # Stop words are not search terms on their own; the whole text is
-        # still matched below, so a query that *is* a stop word ("the") or a
-        # phrase containing one ("the umbrella") keeps working.
-        words = [
-            w
-            for w in (t.strip(_PUNCT) for t in text.split())
-            if len(w) >= 3 and w.casefold() not in _STOP_WORDS
-        ]
-        # Bound the OR-chain: SQLite rejects expression trees deeper than 1000,
-        # so an unbounded query (e.g. a pasted document) would raise a raw
-        # sqlite3.OperationalError. Keep the whole text plus the first
-        # distinct words (order-preserving, deterministic).
-        distinct_words = list(dict.fromkeys(words))[:_MAX_QUERY_TERMS]
-        patterns = {text} | set(distinct_words)
+        patterns = set(_query_terms(text))
         # Unicode-aware case-insensitive match: SQLite's built-in LIKE only
         # folds ASCII, so fold both sides with str.casefold() (same rule the
         # duplicate check uses). Tags are searched too, so an entry filed
@@ -413,6 +426,33 @@ class MemoryStore:
             ),
         )
         return [_row_to_entry(r) for r in rows]
+
+    def search_terms(self, text: str) -> tuple[str, ...]:
+        """The terms ``query(text)`` searches for (F009). Read-only, no database.
+
+        The whole ``text`` first, then its significant words in the order
+        typed (see ``query``). Empty for a blank text, which ``query``
+        answers with nothing.
+        """
+        if not isinstance(text, str):
+            raise TypeError(f"query text must be a string, got {type(text).__name__}")
+        return _query_terms(text) if text.strip() else ()
+
+    def matched_terms(self, text: str, entry: MemoryEntry) -> tuple[str, ...]:
+        """Which of the terms ``query(text)`` searches for ``entry`` contains (F009).
+
+        Read-only explanation of retrieval; it touches no database. The
+        terms are the whole ``text`` plus its significant words (see
+        ``query``), matched against the entry's content and tags by the same
+        rule ``query`` uses (case-insensitive substring). ``query`` ranks by
+        the number of terms matched, so for an entry it returned
+        ``len(matched_terms(text, entry))`` is that entry's relevance score.
+        Returned in query order, the whole text first when it matched.
+        """
+        if not isinstance(entry, MemoryEntry):
+            raise TypeError(f"expected a MemoryEntry, got {type(entry).__name__}")
+        haystack = _searchable_text(entry.content, json.dumps(list(entry.tags)))
+        return tuple(t for t in self.search_terms(text) if t.casefold() in haystack)
 
     # -- Review inbox ----------------------------------------------------
 

@@ -7,7 +7,7 @@ Usage:
     python -m odysseus.cli memory list-approved
     python -m odysseus.cli memory list-rejected
     python -m odysseus.cli memory show <id> [--raw]
-    python -m odysseus.cli memory search "words" [--limit N]
+    python -m odysseus.cli memory search "words" [--limit N] [--explain]
     python -m odysseus.cli memory approve <id>
     python -m odysseus.cli memory reject <id>
     python -m odysseus.cli memory forget <id>
@@ -69,6 +69,11 @@ def _printable(value: object, multiline: bool = False) -> str:
             unsafe = category in ("Cc", "Zl", "Zp") or ch in _BIDI_CONTROLS
         out.append(ch.encode("unicode_escape").decode("ascii") if unsafe else ch)
     return "".join(out)
+
+
+def _quoted(term: str) -> str:
+    """A search term in double quotes, safe to print on one line."""
+    return '"' + _printable(term) + '"'
 
 
 def _print_error(exc: object) -> None:
@@ -299,11 +304,24 @@ def cmd_memory_search(args: argparse.Namespace) -> int:
     if not matches:
         print("No approved memories match.")
         return 0
+    # --explain: say why the entries are in this order. Ranking is by the
+    # number of search terms an entry contains (then confidence, then
+    # recency), so naming the terms each entry matched accounts for it.
+    terms: tuple[str, ...] = ()
+    if args.explain:
+        terms = orchestrator.memory.search_terms(args.query)
+        print(f"Search terms ({len(terms)}): " + ", ".join(_quoted(t) for t in terms))
     for entry in matches:
         print(
             f"[{entry.id}] ({entry.confidence:.2f}, {_printable(entry.source)}) "
             f"{_printable(entry.content)}"
         )
+        if args.explain:
+            matched = orchestrator.memory.matched_terms(args.query, entry)
+            print(
+                f"    matched {len(matched)} of {len(terms)}: "
+                + ", ".join(_quoted(t) for t in matched)
+            )
     return 0
 
 
@@ -418,6 +436,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Maximum results (default: memory.context_limit, the number chat uses)",
+    )
+    search.add_argument(
+        "--explain",
+        action="store_true",
+        help="Also show the search terms and which of them each memory matched "
+        "(matching more terms ranks higher; confidence, then recency, break ties)",
     )
     search.set_defaults(func=cmd_memory_search)
 

@@ -45,6 +45,7 @@ python -m odysseus.cli memory show 1 --raw   # values exactly as stored (also wo
 python -m odysseus.cli memory approve 1 --reviewer alice
 python -m odysseus.cli memory list-rejected
 python -m odysseus.cli memory search "pizza"   # which approved memories this text retrieves
+python -m odysseus.cli memory search "pizza olives" --explain   # ...and which search terms each one matched
 ```
 
 ## Docs

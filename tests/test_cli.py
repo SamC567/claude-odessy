@@ -657,6 +657,60 @@ def test_cli_memory_search_shows_ranked_approved_matches_only(tmp_path, capsys):
     assert capsys.readouterr().out.strip() == "No approved memories match."
 
 
+def test_cli_memory_search_explain_names_the_terms_each_memory_matched(tmp_path, capsys):
+    """F009: `memory search --explain` says why the entries are in this order."""
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path)]
+    _remember_and_approve(base, "Sam likes pizza", "user-note", "0.9")
+    _remember_and_approve(base, "Sam likes pizza with olives", "diary", "0.4")
+    _remember_and_approve(base, "The cat is called Tom", "vet", "0.9", tags=("pets",))
+    for entry_id in ("1", "2", "3"):
+        assert main(base + ["memory", "approve", entry_id]) == 0
+    capsys.readouterr()
+
+    assert main(base + ["memory", "search", "pizza olives?", "--explain"]) == 0
+    captured = capsys.readouterr()
+    # The lower-confidence entry is first because it matched more terms.
+    assert captured.out.splitlines() == [
+        'Search terms (3): "pizza olives?", "pizza", "olives"',
+        "[2] (0.40, diary) Sam likes pizza with olives",
+        '    matched 2 of 3: "pizza", "olives"',
+        "[1] (0.90, user-note) Sam likes pizza",
+        '    matched 1 of 3: "pizza"',
+    ]
+
+    # A match through a tag is explained too.
+    assert main(base + ["memory", "search", "pets", "--explain"]) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        'Search terms (1): "pets"',
+        "[3] (0.90, vet) The cat is called Tom",
+        '    matched 1 of 1: "pets"',
+    ]
+
+    # Without the flag the output is exactly what it was.
+    assert main(base + ["memory", "search", "pizza olives?"]) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "[2] (0.40, diary) Sam likes pizza with olives",
+        "[1] (0.90, user-note) Sam likes pizza",
+    ]
+
+    assert main(base + ["memory", "search", "umbrella", "--explain"]) == 0
+    assert capsys.readouterr().out.strip() == "No approved memories match."
+
+
+def test_cli_memory_search_explain_cannot_forge_lines_or_drive_the_terminal(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path)]
+    _remember_and_approve(base, "pizza night", "a", "0.9")
+    assert main(base + ["memory", "approve", "1"]) == 0
+    capsys.readouterr()
+
+    assert main(base + ["memory", "search", "pizza\n[9] forged \x1b[2J", "--explain"]) == 0
+    out = capsys.readouterr().out
+    assert "\x1b" not in out and len(out.splitlines()) == 3
+    assert out.splitlines()[1:] == ["[1] (0.90, a) pizza night", '    matched 1 of 4: "pizza"']
+
+
 def test_cli_memory_search_limit_defaults_to_what_chat_uses(tmp_path, capsys):
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
