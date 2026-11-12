@@ -7,6 +7,7 @@ Usage:
     python -m odysseus.cli memory list-approved
     python -m odysseus.cli memory list-rejected
     python -m odysseus.cli memory show <id>
+    python -m odysseus.cli memory search "words" [--limit N]
     python -m odysseus.cli memory approve <id>
     python -m odysseus.cli memory reject <id>
     python -m odysseus.cli memory forget <id>
@@ -236,6 +237,38 @@ def cmd_memory_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_memory_search(args: argparse.Namespace) -> int:
+    # Retrieval (F009): show what ``MemoryStore.query`` returns for a text, in
+    # ranked order, without calling a model. By default it uses the same limit
+    # as ``chat`` (``memory.context_limit``), so the output is the set of
+    # approved memories a chat with this text would put in the prompt.
+    # Read-only: nothing is stored or audited.
+    orchestrator, config = _build_orchestrator(args.config)
+    if not args.query.strip():
+        _print_error("search text must not be empty")
+        return 2
+    limit = args.limit if args.limit is not None else config.memory.context_limit
+    if limit < 1:
+        if args.limit is not None:
+            _print_error("--limit must be at least 1")
+            return 2
+        print(
+            "memory.context_limit is 0: chat adds no approved memory to the prompt. "
+            "Use --limit N to search anyway."
+        )
+        return 0
+    matches = orchestrator.memory.query(args.query, limit=limit)
+    if not matches:
+        print("No approved memories match.")
+        return 0
+    for entry in matches:
+        print(
+            f"[{entry.id}] ({entry.confidence:.2f}, {_printable(entry.source)}) "
+            f"{_printable(entry.content)}"
+        )
+    return 0
+
+
 def cmd_memory_remember(args: argparse.Namespace) -> int:
     orchestrator, _ = _build_orchestrator(args.config)
     # Source tracking (F009): the store keeps an existing pending/approved
@@ -332,6 +365,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     show.add_argument("entry_id", type=int)
     show.set_defaults(func=cmd_memory_show)
+
+    search = memory_sub.add_parser(
+        "search", help="Show which approved memories a text retrieves (no model call)"
+    )
+    search.add_argument("query")
+    search.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum results (default: memory.context_limit, the number chat uses)",
+    )
+    search.set_defaults(func=cmd_memory_search)
 
     remember = memory_sub.add_parser("remember", help="Submit a candidate memory")
     remember.add_argument("content")

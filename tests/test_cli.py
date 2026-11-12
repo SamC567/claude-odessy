@@ -618,3 +618,96 @@ def test_cli_memory_remember_existing_source_cannot_drive_the_terminal(tmp_path,
     out = capsys.readouterr().out
     assert "\x1b" not in out and len(out.splitlines()) == 1
     assert "Already stored as entry [1]" in out
+
+
+def _remember_and_approve(base, content, source, confidence, tags=()):
+    args = ["memory", "remember", content, "--source", source, "--confidence", confidence]
+    if tags:
+        args += ["--tags", *tags]
+    assert main(base + args) == 0
+
+
+def test_cli_memory_search_shows_ranked_approved_matches_only(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path)]
+    _remember_and_approve(base, "Sam likes pizza", "user-note", "0.5")
+    _remember_and_approve(base, "Sam likes pizza with olives", "diary", "0.4")
+    _remember_and_approve(base, "pizza is pending", "unreviewed", "0.9")
+    _remember_and_approve(base, "The cat is called Tom", "vet", "0.9", tags=("pets",))
+    for entry_id in ("1", "2", "4"):
+        assert main(base + ["memory", "approve", entry_id]) == 0
+    capsys.readouterr()
+
+    assert main(base + ["memory", "search", "pizza olives?"]) == 0
+    captured = capsys.readouterr()
+    # Best match first (two terms beat one), with id, confidence and source.
+    assert captured.out.splitlines() == [
+        "[2] (0.40, diary) Sam likes pizza with olives",
+        "[1] (0.50, user-note) Sam likes pizza",
+    ]
+    # Unreviewed memory is not retrievable, and a search is not an answer.
+    assert "unreviewed" not in captured.out
+    assert "Jarvis:" not in captured.out
+
+    # Tags are searched as well, as in chat retrieval.
+    assert main(base + ["memory", "search", "pets"]) == 0
+    assert capsys.readouterr().out.splitlines() == ["[4] (0.90, vet) The cat is called Tom"]
+
+    assert main(base + ["memory", "search", "umbrella"]) == 0
+    assert capsys.readouterr().out.strip() == "No approved memories match."
+
+
+def test_cli_memory_search_limit_defaults_to_what_chat_uses(tmp_path, capsys):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        f"memory:\n  db_path: {tmp_path / 'mem.sqlite3'}\n  context_limit: 1\n"
+        f"model:\n  provider: echo\n"
+    )
+    base = ["--config", str(config_path)]
+    _remember_and_approve(base, "pizza on Friday", "a", "0.9")
+    _remember_and_approve(base, "pizza on Sunday", "b", "0.5")
+    assert main(base + ["memory", "approve", "1"]) == 0
+    assert main(base + ["memory", "approve", "2"]) == 0
+    capsys.readouterr()
+
+    assert main(base + ["memory", "search", "pizza"]) == 0
+    assert capsys.readouterr().out.splitlines() == ["[1] (0.90, a) pizza on Friday"]
+
+    assert main(base + ["memory", "search", "pizza", "--limit", "5"]) == 0
+    assert len(capsys.readouterr().out.splitlines()) == 2
+
+    assert main(base + ["memory", "search", "pizza", "--limit", "0"]) == 2
+    assert "error: --limit must be at least 1" in capsys.readouterr().err
+
+
+def test_cli_memory_search_with_context_limit_zero_says_so(tmp_path, capsys):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        f"memory:\n  db_path: {tmp_path / 'mem.sqlite3'}\n  context_limit: 0\n"
+        f"model:\n  provider: echo\n"
+    )
+    base = ["--config", str(config_path)]
+    _remember_and_approve(base, "pizza on Friday", "a", "0.9")
+    assert main(base + ["memory", "approve", "1"]) == 0
+    capsys.readouterr()
+
+    assert main(base + ["memory", "search", "pizza"]) == 0
+    out = capsys.readouterr().out
+    assert "memory.context_limit is 0" in out and "pizza on Friday" not in out
+
+    assert main(base + ["memory", "search", "pizza", "--limit", "3"]) == 0
+    assert "[1] (0.90, a) pizza on Friday" in capsys.readouterr().out
+
+
+def test_cli_memory_search_rejects_blank_text_and_escapes_stored_text(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path)]
+    assert main(base + ["memory", "search", "   "]) == 2
+    assert "error: search text must not be empty" in capsys.readouterr().err
+
+    _remember_and_approve(base, "pizza\n[9] (1.00, admin) forged", "src\x1b[2J", "0.9")
+    assert main(base + ["memory", "approve", "1"]) == 0
+    capsys.readouterr()
+    assert main(base + ["memory", "search", "pizza"]) == 0
+    out = capsys.readouterr().out
+    assert out.splitlines() == ["[1] (0.90, src\\x1b[2J) pizza\\n[9] (1.00, admin) forged"]

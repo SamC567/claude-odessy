@@ -43,6 +43,7 @@ python -m odysseus.cli memory list-pending
 python -m odysseus.cli memory show 1
 python -m odysseus.cli memory approve 1 --reviewer alice
 python -m odysseus.cli memory list-rejected
+python -m odysseus.cli memory search "pizza"   # which approved memories this text retrieves
 ```
 
 ## Docs
