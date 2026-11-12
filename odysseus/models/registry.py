@@ -15,7 +15,11 @@ from odysseus.models.echo_provider import EchoProvider
 from odysseus.models.loopback import is_loopback_url
 from odysseus.models.ollama_provider import OllamaProvider
 
-_BUILTIN_PROVIDERS = {"echo", "ollama"}
+#: The ``model.provider`` values ``build_provider`` knows how to build. Any
+#: other value is answered by the echo fallback; diagnostics (F073) uses this
+#: set to say so instead of keeping its own copy of the list.
+BUILTIN_PROVIDERS = frozenset({"echo", "ollama"})
+_BUILTIN_PROVIDERS = BUILTIN_PROVIDERS  # earlier, private name
 
 
 def build_provider(

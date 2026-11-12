@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from odysseus.config import OdysseusConfig
 from odysseus.health.diagnostics import CheckStatus, run_diagnostics
 from odysseus.memory.store import MemoryStore
@@ -379,3 +381,37 @@ def test_unhealthy_fallback_is_warning_alone_and_critical_with_unhealthy_primary
     assert check.status == CheckStatus.CRITICAL
     assert "boom" in check.detail
     assert any(c.name == "disk_space" for c in report.checks)
+
+
+@pytest.mark.parametrize("allow_external", [False, True])
+@pytest.mark.parametrize("name", ["olama", "Ollama", "openai"])
+def test_config_check_warns_for_unknown_provider_whatever_the_external_gate(name, allow_external):
+    """An unknown model.provider is answered by the echo fallback regardless of
+    identity.allow_external_providers, so the config check must say so in both
+    cases (it used to report OK when the gate was open)."""
+    from odysseus.health.diagnostics import check_config
+    from odysseus.models.registry import build_provider
+
+    cfg = OdysseusConfig(
+        model={"provider": name},
+        identity={"allow_external_providers": allow_external},
+    )
+    # The premise: no real model is built for this name, gate open or not.
+    built = build_provider(cfg.model, cfg.identity.allow_external_providers)
+    assert built.name == "echo"
+
+    result = check_config(cfg)
+    assert result.status == CheckStatus.WARNING
+    assert repr(name) in result.detail
+    assert "echo fallback will be used" in result.detail
+    assert "ollama" in result.detail  # names the values that would work
+
+
+def test_config_check_known_providers_follow_the_registry():
+    from odysseus.health.diagnostics import check_config
+    from odysseus.models.registry import BUILTIN_PROVIDERS
+
+    assert BUILTIN_PROVIDERS == {"echo", "ollama"}
+    for name in BUILTIN_PROVIDERS:
+        cfg = OdysseusConfig(model={"provider": name})
+        assert check_config(cfg).status == CheckStatus.OK

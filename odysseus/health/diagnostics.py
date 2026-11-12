@@ -21,7 +21,7 @@ from pathlib import Path
 from odysseus.config import OdysseusConfig
 from odysseus.memory.store import MemoryStore
 from odysseus.models.base import ModelProvider
-from odysseus.models.registry import is_loopback_url
+from odysseus.models.registry import BUILTIN_PROVIDERS, is_loopback_url
 
 
 class CheckStatus(str, Enum):
@@ -245,14 +245,17 @@ def check_gpu(gpu_reader=_read_gpus, warn_free_percent: float = 5.0) -> CheckRes
 def check_config(config: OdysseusConfig) -> CheckResult:
     # Config already passed pydantic validation to exist as an OdysseusConfig,
     # so this check focuses on policy-level sanity, not just schema validity.
-    if not config.identity.allow_external_providers and config.model.provider not in (
-        "echo",
-        "ollama",
-    ):
+    if config.model.provider not in BUILTIN_PROVIDERS:
+        # build_provider() answers an unknown name with the echo fallback
+        # whatever identity.allow_external_providers says, so the warning must
+        # not depend on that flag: a typo ("olama", "Ollama") would otherwise
+        # report a clean config while no model is ever called.
         return CheckResult(
             "config",
             CheckStatus.WARNING,
-            f"model.provider={config.model.provider!r} is not a recognised local provider",
+            f"model.provider={config.model.provider!r} is not a recognised provider "
+            f"(known: {', '.join(sorted(BUILTIN_PROVIDERS))}; names are case-sensitive): "
+            "the echo fallback will be used",
         )
     if (
         config.model.provider == "ollama"
