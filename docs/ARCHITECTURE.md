@@ -73,6 +73,9 @@ odysseus/
 4. On `ModelProviderError`, log it via `audit()` and retry with the
    fallback provider (`EchoProvider` by default) — this is what keeps
    the system usable with no local model server running.
+   If the fallback fails as well, `respond` raises one
+   `ModelProviderError` naming both failures (audited as
+   `orchestrator.fallback_failed`).
 5. Return an `InteractionResult` that *honestly* reports whether the
    answer came from a live model (`is_live_model`) and whether the
    primary provider was skipped (`degraded`).
@@ -102,6 +105,8 @@ odysseus/
   Ollama process. Verify this first against a real local install.
 
 ## Recent fixes
+
+- `Orchestrator.respond` (F001/F003) holds the fallback provider to the same rules as the primary. Previously a fallback that raised something other than `ModelProviderError`, or returned a value that is not a `GenerationResponse`, ended the interaction with a traceback; a fallback returning blank text was shown as the answer; and a fallback raising `ModelProviderError` surfaced only its own message, dropping the reason the primary had failed. All four now end `respond` with one `ModelProviderError` reading `no provider could answer: <primary failure>; fallback provider '<name>' <failed: ... | raised an unexpected <Type>: ... | returned no usable reply: ...>`, which the CLI prints as `error: ...` (exit 2). The audit trail records `orchestrator.fallback_failed` (with `unexpected='<Type>'` when applicable) and no `orchestrator.generate`. `KeyboardInterrupt`/`SystemExit` still pass through. The raised error is always plain `ModelProviderError`, so a fallback's `ModelUnavailableError` subtype is available only as `__cause__`. Reachable only with a custom fallback passed to `Orchestrator(...)`: the built-in `EchoProvider` has no such path and there is no config option that selects a different fallback. Tested with test doubles at the orchestrator level; no CLI test.
 
 - `Orchestrator.respond` (F001/F003) falls back when the primary provider returns something that cannot be shown as an answer: a value that is not a `GenerationResponse` (e.g. `None`), a `text` that is not a string, or blank/whitespace-only text. Previously the first two ended the interaction with an `AttributeError` traceback (the reply is read after the `try` block) and the third was returned as a live model's answer, so `chat` printed an empty line with no degraded notice. `OllamaProvider` already refuses a blank reply itself; this is the same rule enforced once for every provider. The fallback answers with `degraded=True`, `used_fallback=True` and `degraded_reason` reading `provider '<name>' returned no usable reply: <what was wrong>` (the reply is described, not quoted); the audit trail records `orchestrator.provider_failed` and no `orchestrator.generate` for the primary. A reply with surrounding whitespace is returned unchanged. The fallback provider's own reply is not checked.
 

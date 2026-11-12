@@ -271,3 +271,91 @@ def test_usable_reply_with_surrounding_whitespace_is_returned_unchanged(identity
     assert result.text == "  hi\n"
     assert result.degraded is False
     assert result.used_fallback is False
+
+
+class _RaisesProvider(ModelProvider):
+    """Raises whatever it was given from ``generate``."""
+
+    name = "spare"
+
+    def __init__(self, exc: Exception):
+        self.exc = exc
+
+    def generate(self, request: GenerationRequest) -> GenerationResponse:
+        raise self.exc
+
+    def health_check(self, timeout_seconds=None):
+        return False, "broken"
+
+
+class _SpareReturnsProvider(_ReturnsProvider):
+    name = "spare"
+
+
+@pytest.mark.parametrize(
+    ("fallback", "expected"),
+    [
+        (_RaisesProvider(ModelUnavailableError("spare is down")), "failed: spare is down"),
+        (_RaisesProvider(KeyError("choices")), "raised an unexpected KeyError: 'choices'"),
+        (_SpareReturnsProvider(None), "returned no usable reply: a NoneType instead of a GenerationResponse"),
+        (_SpareReturnsProvider(_blank_response(" \n")), "returned no usable reply: blank text"),
+    ],
+)
+def test_failing_fallback_ends_with_one_typed_error_naming_both_failures(
+    identity, memory_store, fallback, expected
+):
+    orchestrator = Orchestrator(
+        identity, _AlwaysFailsProvider(), memory_store, fallback_provider=fallback
+    )
+
+    with pytest.raises(ModelProviderError) as excinfo:
+        orchestrator.respond("hello")
+
+    assert str(excinfo.value) == (
+        f"no provider could answer: simulated outage; fallback provider 'spare' {expected}"
+    )
+
+
+def test_failing_fallback_is_audited_and_never_recorded_as_a_generation(
+    identity, memory_store, caplog
+):
+    import logging
+
+    from odysseus.logging_setup import AUDIT_LOGGER_NAME
+
+    orchestrator = Orchestrator(
+        identity,
+        _AlwaysFailsProvider(),
+        memory_store,
+        fallback_provider=_RaisesProvider(KeyError("choices")),
+    )
+    audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
+    audit_logger.addHandler(caplog.handler)
+    try:
+        with caplog.at_level(logging.INFO, logger=AUDIT_LOGGER_NAME):
+            with pytest.raises(ModelProviderError):
+                orchestrator.respond("hello")
+    finally:
+        audit_logger.removeHandler(caplog.handler)
+
+    messages = [r.getMessage() for r in caplog.records]
+    failed = [m for m in messages if "orchestrator.fallback_failed" in m]
+    assert len(failed) == 1
+    assert "spare" in failed[0]
+    assert "KeyError" in failed[0]
+    assert not [m for m in messages if "orchestrator.generate" in m]
+
+
+def test_keyboard_interrupt_from_a_fallback_is_not_swallowed(identity, memory_store):
+    class _Interrupted(_RaisesProvider):
+        def generate(self, request):
+            raise KeyboardInterrupt
+
+    orchestrator = Orchestrator(
+        identity,
+        _AlwaysFailsProvider(),
+        memory_store,
+        fallback_provider=_Interrupted(RuntimeError("unused")),
+    )
+    with pytest.raises(KeyboardInterrupt):
+        orchestrator.respond("hello")

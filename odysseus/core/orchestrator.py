@@ -66,6 +66,10 @@ class Orchestrator:
     behind "the system must remain usable when optional services or
     external models are unavailable". It defaults to the dependency-free
     ``EchoProvider`` so that guarantee holds even with no extra config.
+
+    A custom fallback that fails as well (raises, or returns no usable
+    reply) ends ``respond`` with a single ``ModelProviderError`` naming both
+    failures; the built-in ``EchoProvider`` has no such path.
     """
 
     def __init__(
@@ -132,8 +136,7 @@ class Orchestrator:
                 provider=self.provider.name,
                 error=str(exc),
             )
-            response = self.fallback_provider.generate(request)
-            audit("orchestrator.generate", provider=self.fallback_provider.name, degraded=True)
+            response = self._answer_from_fallback(request, degraded_reason)
         except Exception as exc:  # noqa: BLE001 - see comment
             # The interface says a provider raises only ModelProviderError.
             # A provider that breaks that (a bug in a new or third-party
@@ -154,8 +157,7 @@ class Orchestrator:
                 error=str(exc),
                 unexpected=type(exc).__name__,
             )
-            response = self.fallback_provider.generate(request)
-            audit("orchestrator.generate", provider=self.fallback_provider.name, degraded=True)
+            response = self._answer_from_fallback(request, degraded_reason)
 
         return InteractionResult(
             text=response.text,
@@ -167,6 +169,42 @@ class Orchestrator:
             degraded_reason=degraded_reason,
             used_fallback=used_fallback,
         )
+
+    def _answer_from_fallback(
+        self, request: GenerationRequest, primary_failure: str
+    ) -> GenerationResponse:
+        """Ask the fallback provider, holding it to the same rules as the primary.
+
+        There is nothing left to degrade to after the fallback, so when it
+        raises (anything) or returns no usable reply, the interaction ends
+        with one ``ModelProviderError`` that names both failures -- a typed
+        error the caller can report, not a traceback from a provider's
+        internals and not a blank line presented as an answer.
+        """
+        name = self.fallback_provider.name
+        cause: Exception | None = None
+        unexpected: str | None = None
+        try:
+            response = self.fallback_provider.generate(request)
+            problem = _reply_problem(response)
+            if problem is not None:
+                problem = f"returned no usable reply: {problem}"
+        except ModelProviderError as exc:
+            cause, problem = exc, f"failed: {exc}"
+        except Exception as exc:  # noqa: BLE001 - same reasoning as in respond()
+            cause, unexpected = exc, type(exc).__name__
+            problem = f"raised an unexpected {unexpected}: {exc}"
+        if problem is None:
+            audit("orchestrator.generate", provider=name, degraded=True)
+            return response
+        fields = {"provider": name, "error": problem}
+        if unexpected is not None:
+            fields["unexpected"] = unexpected
+        audit("orchestrator.fallback_failed", **fields)
+        raise ModelProviderError(
+            f"no provider could answer: {primary_failure}; "
+            f"fallback provider {name!r} {problem}"
+        ) from cause
 
     def remember(
         self,
