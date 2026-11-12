@@ -775,3 +775,17 @@ Append-only log of scheduled-run changes.
 
 - An out-of-range id is reported as "not found", not as a separate "invalid id" error. Reason: it is true (no such row can exist), it matches what every other unknown id already does, and it needs no new error path in callers. Reversible in `MemoryStore.get` alone; veto if such an id should be rejected with its own message.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-12 — F009 the same fact submitted twice at the same moment is stored once
+
+- Gap: `MemoryStore.submit_candidate` looked for a live duplicate on one connection, closed it, then inserted on another. Two submitters of the same new fact (two CLI processes, or two threads sharing a database) could both find nothing and both insert, leaving two PENDING entries for one fact, which the de-duplication from 2026-11-08 is meant to prevent. Carried in "Not done" since the `memory remember` entry of 2026-11-12. No test covered it.
+- Fix: in `odysseus/memory/store.py`, `submit_candidate` opens one connection, takes the write lock with `BEGIN IMMEDIATE`, runs the duplicate lookup on that connection and inserts only if nothing was found, then commits. `_find_live_duplicate` takes an optional connection for this; `find_duplicate` and every read path are unchanged. A second submitter waits at `BEGIN IMMEDIATE` until the first commits, then sees its row and returns it (audited `memory.duplicate_candidate` as before). No schema, config, CLI or interface change. docs/ARCHITECTURE.md "Recent fixes" updated.
+- Test: `test_same_fact_submitted_concurrently_is_stored_once` (tests/test_memory.py). It holds the first submitter between its lookup and its insert while a second store on the same file submits the same fact from another thread. Fails without the change (verified by stashing `odysseus/`: 1 failed, 194 passed; two rows stored).
+- Suite: 195 passed (baseline 194, python3.12 venv outside the repo, cloud sandbox).
+- Not done: no CLI smoke run and no test with two real processes (the test uses two threads with separate connections, which take the same SQLite file lock). A submitter that cannot get the write lock within the connection's 5 s timeout now fails with `MemoryError_("Could not store memory candidate: database is locked")`; before, only the insert itself could hit that. The schema still has no unique constraint, so a row inserted by another tool is not prevented. The test adds about one second to the suite (it waits for the second submitter). Not run on Windows or on a network drive, where SQLite file locking is less reliable. Carried over: no command to repair, quarantine or export an unreadable row; `memory search` does not say why an entry ranked where it did.
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- Used a transaction, not a unique index on normalised content. Reason: an index needs a schema migration and would fail to build on a database that already holds duplicates, and REJECTED rows must stay re-submittable; the transaction changes no stored data. Reversible in `submit_candidate` alone; veto if a schema-level guarantee is wanted.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.

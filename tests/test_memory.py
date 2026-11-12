@@ -496,3 +496,48 @@ def test_ids_and_limits_beyond_sqlite_integer_range_do_not_raise_overflow(memory
     assert [e.id for e in memory_store.query("pizza", limit=10**30)] == [entry.id]
     # The largest id SQLite can hold is still looked up normally.
     assert memory_store.get(2**63 - 1) is None
+
+
+def test_same_fact_submitted_concurrently_is_stored_once(tmp_path):
+    """Two submitters that both pass the duplicate check before either has
+    inserted must still end up with one entry (F009): the check and the
+    insert are one write transaction."""
+    import threading
+
+    db = tmp_path / "memory.db"
+    first = MemoryStore(db)
+    second = MemoryStore(db)
+    results: dict[str, MemoryEntry] = {}
+    errors: list[BaseException] = []
+
+    def submit_second():
+        try:
+            results["second"] = second.submit_candidate(
+                MemoryEntry(content="sam  LIKES pizza", source="other", confidence=0.4)
+            )
+        except BaseException as exc:  # reported by the assertion below
+            errors.append(exc)
+
+    other = threading.Thread(target=submit_second)
+    original = first._find_live_duplicate
+
+    def check_then_let_the_other_submitter_run(*args, **kwargs):
+        found = original(*args, **kwargs)
+        # The first submitter has looked and found nothing. Give the second
+        # one time to do its whole submission before the first inserts.
+        other.start()
+        other.join(timeout=1.0)
+        return found
+
+    first._find_live_duplicate = check_then_let_the_other_submitter_run
+    results["first"] = first.submit_candidate(
+        MemoryEntry(content="Sam likes pizza", source="user", confidence=0.8)
+    )
+    other.join(timeout=10.0)
+
+    assert not other.is_alive()
+    assert errors == []
+    assert first.count_by_status() == {"pending": 1}
+    assert results["first"].id == results["second"].id
+    # Whoever got the write lock first is the one whose provenance is kept.
+    assert results["second"].source == "user"

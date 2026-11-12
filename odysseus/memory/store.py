@@ -196,16 +196,6 @@ class MemoryStore:
             raise TypeError(
                 f"submit_candidate expects a MemoryEntry, got {type(entry).__name__}"
             )
-        duplicate = self._find_live_duplicate(entry.content)
-        if duplicate is not None:
-            audit(
-                "memory.duplicate_candidate",
-                id=duplicate.id,
-                source=entry.source,
-                status=duplicate.status.value,
-            )
-            return duplicate
-
         status = MemoryStatus.PENDING
         reviewed_at = None
         reviewer = None
@@ -217,26 +207,43 @@ class MemoryStore:
             reviewed_at = datetime.now(timezone.utc)
             reviewer = "auto-approval-rule"
 
+        duplicate = None
         with closing(self._connect()) as conn:
             try:
-                cur = conn.execute(
-                    "INSERT INTO memory_entries "
-                    "(content, source, confidence, status, tags, created_at, reviewed_at, reviewer) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        entry.content,
-                        entry.source,
-                        entry.confidence,
-                        status.value,
-                        json.dumps(list(entry.tags)),
-                        entry.created_at.isoformat(),
-                        reviewed_at.isoformat() if reviewed_at else None,
-                        reviewer,
-                    ),
-                )
+                # Take the write lock before looking for a duplicate, so a
+                # second submitter of the same fact (another process or
+                # thread) waits here and then sees this row, instead of both
+                # checking first and both inserting.
+                conn.execute("BEGIN IMMEDIATE")
+                duplicate = self._find_live_duplicate(entry.content, conn)
+                if duplicate is None:
+                    cur = conn.execute(
+                        "INSERT INTO memory_entries "
+                        "(content, source, confidence, status, tags, created_at, reviewed_at, reviewer) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            entry.content,
+                            entry.source,
+                            entry.confidence,
+                            status.value,
+                            json.dumps(list(entry.tags)),
+                            entry.created_at.isoformat(),
+                            reviewed_at.isoformat() if reviewed_at else None,
+                            reviewer,
+                        ),
+                    )
                 conn.commit()
             except sqlite3.Error as exc:
                 raise MemoryError_(f"Could not store memory candidate: {exc}") from exc
+
+        if duplicate is not None:
+            audit(
+                "memory.duplicate_candidate",
+                id=duplicate.id,
+                source=entry.source,
+                status=duplicate.status.value,
+            )
+            return duplicate
 
         new_id = cur.lastrowid
         audit(
@@ -250,15 +257,19 @@ class MemoryStore:
         assert stored is not None
         return stored
 
-    def _find_live_duplicate(self, content: str) -> MemoryEntry | None:
+    def _find_live_duplicate(
+        self, content: str, conn: sqlite3.Connection | None = None
+    ) -> MemoryEntry | None:
         """Existing PENDING/APPROVED entry with the same content (ignoring case
         and surrounding/repeated whitespace), if any. REJECTED entries do not
-        count, so a previously rejected fact can be proposed again."""
+        count, so a previously rejected fact can be proposed again.
+
+        With ``conn`` the lookup runs on that connection (inside the caller's
+        transaction) and sqlite3 errors are left for the caller to convert."""
         wanted = " ".join(content.split()).casefold()
-        rows = self._read(
-            "SELECT * FROM memory_entries WHERE status IN (?, ?) ORDER BY id ASC",
-            (MemoryStatus.PENDING.value, MemoryStatus.APPROVED.value),
-        )
+        sql = "SELECT * FROM memory_entries WHERE status IN (?, ?) ORDER BY id ASC"
+        params = (MemoryStatus.PENDING.value, MemoryStatus.APPROVED.value)
+        rows = self._read(sql, params) if conn is None else conn.execute(sql, params).fetchall()
         for row in rows:
             if " ".join(row["content"].split()).casefold() == wanted:
                 return _row_to_entry(row)
