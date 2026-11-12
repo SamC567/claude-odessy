@@ -683,3 +683,127 @@ def test_list_approved_refuses_a_blank_or_non_string_tag(memory_store: MemorySto
         memory_store.list_approved(tag="   ")
     with pytest.raises(TypeError):
         memory_store.list_approved(tag=3)
+
+
+def _spoil(store: MemoryStore, entry_id: int, column: str, value) -> None:
+    """Hand-edit one column of a stored row, as a bad restore would."""
+    import sqlite3
+
+    with sqlite3.connect(store.db_path) as conn:
+        conn.execute(f"UPDATE memory_entries SET {column} = ? WHERE id = ?", (value, entry_id))
+    conn.close()
+
+
+def test_quarantine_moves_an_unreadable_row_aside_and_memory_works_again(memory_store: MemoryStore):
+    """F009: one corrupt approved row no longer blocks listings and retrieval."""
+    from odysseus.exceptions import MemoryError_
+
+    good = memory_store.submit_candidate(MemoryEntry("Sam drinks green tea", "user", 0.9))
+    bad = memory_store.submit_candidate(MemoryEntry("Sam drinks black tea", "note", 0.7, tags=("drink",)))
+    memory_store.approve(good.id, reviewer="alice")
+    memory_store.approve(bad.id, reviewer="alice")
+    _spoil(memory_store, bad.id, "tags", "not json")
+    before = memory_store.raw_row(bad.id)
+    with pytest.raises(MemoryError_):
+        memory_store.list_approved()
+    with pytest.raises(MemoryError_):
+        memory_store.query("tea")
+
+    moved = memory_store.quarantine(bad.id, reviewer="  bob ")
+
+    assert [e.id for e in memory_store.list_approved()] == [good.id]
+    assert [e.id for e in memory_store.query("tea")] == [good.id]
+    assert memory_store.unreadable_entry_ids() == []
+    assert memory_store.get(bad.id) is None
+    assert memory_store.raw_row(bad.id) is None
+    # Nothing was discarded: every stored value is kept exactly as it was.
+    quarantined = memory_store.list_quarantined()
+    assert quarantined == [moved]
+    assert {k: moved[k] for k in before} == before
+    assert moved["quarantined_by"] == "bob"
+    assert moved["quarantined_at"]
+
+
+@pytest.mark.parametrize("value", [42, 4.5, b"\x00\xff", "archived"])
+def test_quarantine_keeps_the_stored_value_and_its_type(memory_store: MemoryStore, value):
+    stored = memory_store.submit_candidate(MemoryEntry("a fact", "user", 0.5))
+    _spoil(memory_store, stored.id, "status", value)
+    before = memory_store.raw_row(stored.id)
+
+    memory_store.quarantine(stored.id, reviewer="bob")
+
+    (kept,) = memory_store.list_quarantined()
+    assert kept["status"] == before["status"]
+    assert type(kept["status"]) is type(before["status"])
+
+
+def test_quarantine_refuses_a_readable_entry_in_any_status(memory_store: MemoryStore):
+    """Not a way to remove memory without a review decision."""
+    pending = memory_store.submit_candidate(MemoryEntry("pending fact", "user", 0.5))
+    approved = memory_store.submit_candidate(MemoryEntry("approved fact", "user", 0.5))
+    rejected = memory_store.submit_candidate(MemoryEntry("rejected fact", "user", 0.5))
+    memory_store.approve(approved.id, reviewer="alice")
+    memory_store.reject(rejected.id, reviewer="alice")
+
+    for entry in (pending, approved, rejected):
+        with pytest.raises(ReviewInboxError, match="is readable"):
+            memory_store.quarantine(entry.id, reviewer="bob")
+
+    assert memory_store.list_quarantined() == []
+    assert memory_store.count_by_status() == {"pending": 1, "approved": 1, "rejected": 1}
+
+
+def test_quarantine_unknown_id_or_blank_reviewer_is_a_review_error(memory_store: MemoryStore):
+    stored = memory_store.submit_candidate(MemoryEntry("a fact", "user", 0.5))
+    _spoil(memory_store, stored.id, "created_at", "yesterday")
+    for unknown in (999, 2**70, -1, True, "1", None):
+        with pytest.raises(ReviewInboxError, match="No memory entry"):
+            memory_store.quarantine(unknown, reviewer="bob")
+    for blank in ("", "   ", None):
+        with pytest.raises(ReviewInboxError, match="reviewer"):
+            memory_store.quarantine(stored.id, reviewer=blank)
+    assert memory_store.unreadable_entry_ids() == [stored.id]
+    assert memory_store.list_quarantined() == []
+
+
+def test_quarantined_id_is_not_reused_and_a_second_quarantine_is_not_found(memory_store: MemoryStore):
+    stored = memory_store.submit_candidate(MemoryEntry("a fact", "user", 0.5))
+    _spoil(memory_store, stored.id, "status", "archived")
+    memory_store.quarantine(stored.id, reviewer="bob")
+
+    with pytest.raises(ReviewInboxError, match="No memory entry"):
+        memory_store.quarantine(stored.id, reviewer="bob")
+    newer = memory_store.submit_candidate(MemoryEntry("another fact", "user", 0.5))
+    assert newer.id != stored.id
+    assert [row["id"] for row in memory_store.list_quarantined()] == [stored.id]
+
+
+def test_quarantine_is_audited_and_never_creates_its_table_unless_used(memory_store: MemoryStore, caplog):
+    import logging
+    import sqlite3
+
+    def tables():
+        conn = sqlite3.connect(memory_store.db_path)
+        try:
+            return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        finally:
+            conn.close()
+
+    stored = memory_store.submit_candidate(MemoryEntry("a fact", "user", 0.5))
+    assert memory_store.list_quarantined() == []
+    with pytest.raises(ReviewInboxError):
+        memory_store.quarantine(stored.id, reviewer="bob")
+    assert "memory_quarantine" not in tables()
+
+    _spoil(memory_store, stored.id, "status", "archived")
+    audit_logger = logging.getLogger("odysseus.audit")
+    audit_logger.addHandler(caplog.handler)
+    try:
+        with caplog.at_level(logging.INFO, logger="odysseus.audit"):
+            memory_store.quarantine(stored.id, reviewer="bob")
+    finally:
+        audit_logger.removeHandler(caplog.handler)
+    assert "memory_quarantine" in tables()
+    records = [r.getMessage() for r in caplog.records if "memory.quarantine" in r.getMessage()]
+    assert len(records) == 1
+    assert f"id={stored.id}" in records[0] and "reviewer='bob'" in records[0]

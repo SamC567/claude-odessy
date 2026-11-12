@@ -11,6 +11,8 @@ Usage:
     python -m odysseus.cli memory approve <id>
     python -m odysseus.cli memory reject <id>
     python -m odysseus.cli memory forget <id>
+    python -m odysseus.cli memory quarantine <id>
+    python -m odysseus.cli memory list-quarantined
     python -m odysseus.cli memory remember "fact" --source user --confidence 0.8
     python -m odysseus.cli config show
 """
@@ -74,6 +76,20 @@ def _printable(value: object, multiline: bool = False) -> str:
 def _quoted(term: str) -> str:
     """A search term in double quotes, safe to print on one line."""
     return '"' + _printable(term) + '"'
+
+
+def _print_raw_values(stored: dict) -> None:
+    """Print a row's stored column values (all but ``id``), one aligned line each.
+
+    repr() keeps the stored type visible; ``_printable`` covers what repr
+    leaves alone, so a stored value cannot forge a line or drive the terminal.
+    """
+    width = max(len(str(name)) for name in stored) + 1
+    for name, value in stored.items():
+        if name == "id":
+            continue
+        shown = "NULL" if value is None else _printable(repr(value))
+        print(f"  {(str(name) + ':').ljust(width)} {shown}")
 
 
 def _print_error(exc: object) -> None:
@@ -250,12 +266,7 @@ def cmd_memory_show(args: argparse.Namespace) -> int:
         # repr() keeps the stored type visible ('0.9' vs 0.9, b'...' for a
         # blob); _printable then covers what repr leaves alone (bidi controls).
         print(f"[{_printable(repr(stored.get('id')))}] raw stored values (not decoded or validated)")
-        width = max(len(str(name)) for name in stored) + 1
-        for name, value in stored.items():
-            if name == "id":
-                continue
-            shown = "NULL" if value is None else _printable(repr(value))
-            print(f"  {(str(name) + ':').ljust(width)} {shown}")
+        _print_raw_values(stored)
         return 0
     try:
         entry = orchestrator.memory.get(args.entry_id)
@@ -393,6 +404,31 @@ def cmd_memory_forget(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_memory_quarantine(args: argparse.Namespace) -> int:
+    # F009: the remedy for a row ``health`` reports as unreadable. The row is
+    # moved aside with its values unchanged, never deleted; the store refuses
+    # a readable entry, so this cannot stand in for a review decision.
+    orchestrator, _ = _build_orchestrator(args.config)
+    moved = orchestrator.memory.quarantine(args.entry_id, reviewer=args.reviewer)
+    print(
+        f"Quarantined [{moved['id']}] (moved out of memory with its stored values "
+        f"unchanged; see 'memory list-quarantined')"
+    )
+    return 0
+
+
+def cmd_memory_list_quarantined(args: argparse.Namespace) -> int:
+    orchestrator, _ = _build_orchestrator(args.config)
+    rows = orchestrator.memory.list_quarantined()
+    if not rows:
+        print("No quarantined entries.")
+        return 0
+    for stored in rows:
+        print(f"[{_printable(repr(stored.get('id')))}] quarantined (raw stored values, not used in answers)")
+        _print_raw_values(stored)
+    return 0
+
+
 def cmd_config_show(args: argparse.Namespace) -> int:
     _, config = _build_orchestrator(args.config)
     print(config.model_dump_json(indent=2))
@@ -484,6 +520,19 @@ def build_parser() -> argparse.ArgumentParser:
     forget.add_argument("entry_id", type=int)
     forget.add_argument("--reviewer", default="cli-user")
     forget.set_defaults(func=cmd_memory_forget)
+
+    quarantine = memory_sub.add_parser(
+        "quarantine",
+        help="Move an entry that cannot be read (see 'health') out of memory, unchanged",
+    )
+    quarantine.add_argument("entry_id", type=int)
+    quarantine.add_argument("--reviewer", default="cli-user")
+    quarantine.set_defaults(func=cmd_memory_quarantine)
+
+    list_quarantined = memory_sub.add_parser(
+        "list-quarantined", help="List quarantined entries with their values as stored"
+    )
+    list_quarantined.set_defaults(func=cmd_memory_list_quarantined)
 
     config_cmd = sub.add_parser("config", help="Inspect effective configuration")
     config_sub = config_cmd.add_subparsers(dest="config_command", required=True)

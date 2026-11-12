@@ -18,7 +18,9 @@ against the original Odysseus repository" — read that section first.
   configured, and even that is optional — the system runs fully offline
   on the `echo` provider.
 - **State surfaces that would need migrating**: only the
-  `memory_entries` SQLite table. There is no other persisted state
+  `memory_entries` SQLite table and, if `memory quarantine` was ever
+  used, the `memory_quarantine` table beside it (unreadable rows moved
+  aside, values as stored). There is no other persisted state
   (config is files, not a database; logs are append-only files).
 
 ## Migration path once the original repo is available

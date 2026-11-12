@@ -923,3 +923,71 @@ def test_cli_memory_list_approved_tag_cannot_forge_lines_or_drive_the_terminal(t
     out = capsys.readouterr().out
     assert len(out.splitlines()) == 1
     assert "\x1b" not in out and "\\n" in out and "\\x1b" in out
+
+
+def test_cli_memory_quarantine_moves_a_corrupt_row_aside(tmp_path, capsys):
+    """F009: the remedy for a row `health` reports as unreadable."""
+    config_path = _corrupt_row(tmp_path, "status", "archived")
+    base = ["--config", str(config_path), "memory"]
+    assert main(["--config", str(config_path), "health"]) in (0, 1)
+    assert "cannot be read (id 1)" in capsys.readouterr().out
+
+    assert main(base + ["list-quarantined"]) == 0
+    assert capsys.readouterr().out.splitlines() == ["No quarantined entries."]
+
+    assert main(base + ["quarantine", "1", "--reviewer", "alice"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "Quarantined [1] (moved out of memory with its stored values unchanged; "
+        "see 'memory list-quarantined')"
+    ]
+
+    assert main(["--config", str(config_path), "health"]) in (0, 1)
+    assert "cannot be read" not in capsys.readouterr().out
+    assert main(base + ["show", "1"]) == 2
+    assert "No memory entry with id=1" in capsys.readouterr().err
+
+    assert main(base + ["list-quarantined"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "[1] quarantined (raw stored values, not used in answers)"
+    assert "  content:        'the gate code is 4471'" in lines
+    assert "  status:         'archived'" in lines
+    assert "  tags:           '[\"home\"]'" in lines
+    assert "  quarantined_by: 'alice'" in lines
+    assert any(line.startswith("  quarantined_at: '") for line in lines)
+
+
+def test_cli_memory_quarantine_refuses_a_readable_or_unknown_entry(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path), "memory"]
+    assert main(base + ["remember", "Sam likes pizza", "--source", "user", "--confidence", "0.8"]) == 0
+    capsys.readouterr()
+
+    assert main(base + ["quarantine", "1"]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("error: Entry 1 is readable")
+
+    assert main(base + ["quarantine", "99999999999999999999999"]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "No memory entry with id=99999999999999999999999" in captured.err
+
+    assert main(base + ["list-pending"]) == 0
+    assert "[1]" in capsys.readouterr().out
+
+
+def test_cli_memory_list_quarantined_cannot_forge_lines_or_drive_the_terminal(tmp_path, capsys):
+    config_path = _corrupt_row(tmp_path, "status", "gone\n[2] forged \x1b[2J‮")
+    base = ["--config", str(config_path), "memory"]
+    assert main(base + ["quarantine", "1", "--reviewer", "eve\n[3] forged \x1b[2J"]) == 0
+    capsys.readouterr()
+
+    assert main(base + ["list-quarantined"]) == 0
+    out = capsys.readouterr().out
+    for raw in ("\x1b", "\r", "‮"):
+        assert raw not in out
+    lines = out.splitlines()
+    assert [line for line in lines if not line.startswith("  ")] == [
+        "[1] quarantined (raw stored values, not used in answers)"
+    ]

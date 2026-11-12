@@ -42,6 +42,8 @@ python -m odysseus.cli memory remember "fact text" --source user --confidence 0.
 python -m odysseus.cli memory list-pending
 python -m odysseus.cli memory show 1
 python -m odysseus.cli memory show 1 --raw   # values exactly as stored (also works for a corrupt row)
+python -m odysseus.cli memory quarantine 1 --reviewer alice   # move a row that cannot be read out of memory, unchanged
+python -m odysseus.cli memory list-quarantined   # quarantined rows, values exactly as stored
 python -m odysseus.cli memory approve 1 --reviewer alice
 python -m odysseus.cli memory list-rejected
 python -m odysseus.cli memory list-approved --tag food   # approved memories filed under exactly that tag

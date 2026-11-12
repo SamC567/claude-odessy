@@ -38,6 +38,35 @@ CREATE INDEX IF NOT EXISTS idx_memory_status ON memory_entries(status);
 """
 
 
+# Where ``MemoryStore.quarantine`` puts a row that cannot be decoded. Created
+# only when first needed, so a database never quarantined from keeps its
+# schema. The value columns are declared without a type on purpose: SQLite
+# then stores each value exactly as it was held in ``memory_entries`` (a typed
+# column would convert, say, a number found in ``content`` to text). ``id`` is
+# the row's original id; ``memory_entries`` is AUTOINCREMENT, so that id is
+# never handed out again.
+_QUARANTINE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS memory_quarantine (
+    id INTEGER PRIMARY KEY,
+    content,
+    source,
+    confidence,
+    status,
+    tags,
+    created_at,
+    reviewed_at,
+    reviewer,
+    quarantined_at TEXT NOT NULL,
+    quarantined_by TEXT NOT NULL
+)
+"""
+
+_ENTRY_COLUMNS = (
+    "id", "content", "source", "confidence", "status", "tags",
+    "created_at", "reviewed_at", "reviewer",
+)
+
+
 _PUNCT = ".,;:!?\"'()[]{}<>"
 
 
@@ -538,6 +567,86 @@ class MemoryStore:
         updated = self.get(entry_id)
         assert updated is not None
         return updated
+
+    # -- Quarantine --------------------------------------------------------
+
+    def quarantine(self, entry_id: int, reviewer: str) -> dict[str, object]:
+        """Move one row that cannot be decoded out of memory, unchanged (F009).
+
+        A row ``get`` refuses as corrupt (see ``unreadable_entry_ids``) makes
+        every listing or query that returns it fail, and no review decision
+        can be applied to it. This moves that row, with its stored values
+        exactly as they are, from ``memory_entries`` into the
+        ``memory_quarantine`` table in one transaction; nothing is discarded
+        (``list_quarantined`` shows it). Only an unreadable row can be
+        quarantined: a readable entry is refused with ``ReviewInboxError``
+        (use ``reject``/``retract``), so this is not a way to remove memory
+        without a review decision. Returns the quarantined values.
+        """
+        if not isinstance(reviewer, str) or not reviewer.strip():
+            raise ReviewInboxError("A non-empty reviewer is required to quarantine an entry")
+        reviewer = reviewer.strip()
+        if (
+            isinstance(entry_id, bool)
+            or not isinstance(entry_id, int)
+            or not _SQLITE_MIN_INT <= entry_id <= _SQLITE_MAX_INT
+        ):
+            raise ReviewInboxError(f"No memory entry with id={entry_id}")
+        now = datetime.now(timezone.utc).isoformat()
+        with closing(self._connect()) as conn:
+            try:
+                # One write transaction: the row is checked, copied and removed
+                # with the lock held, so it cannot change in between and a
+                # failure part-way leaves it where it was (rollback on close).
+                conn.execute("BEGIN IMMEDIATE")
+                row = conn.execute(
+                    "SELECT * FROM memory_entries WHERE id = ?", (entry_id,)
+                ).fetchone()
+                if row is None:
+                    raise ReviewInboxError(f"No memory entry with id={entry_id}")
+                try:
+                    _row_to_entry(row)
+                except MemoryError_:
+                    pass
+                else:
+                    raise ReviewInboxError(
+                        f"Entry {entry_id} is readable; only an entry that cannot be "
+                        f"read can be quarantined (reject or retract it instead)"
+                    )
+                values = [row[name] for name in _ENTRY_COLUMNS]
+                conn.execute(_QUARANTINE_SCHEMA)
+                conn.execute(
+                    f"INSERT INTO memory_quarantine "
+                    f"({', '.join(_ENTRY_COLUMNS)}, quarantined_at, quarantined_by) "
+                    f"VALUES ({', '.join('?' * (len(_ENTRY_COLUMNS) + 2))})",
+                    (*values, now, reviewer),
+                )
+                conn.execute("DELETE FROM memory_entries WHERE id = ?", (entry_id,))
+                conn.commit()
+            except sqlite3.Error as exc:
+                raise MemoryError_(f"Could not quarantine memory entry {entry_id}: {exc}") from exc
+        audit(
+            "memory.quarantine",
+            id=entry_id,
+            reviewer=reviewer,
+            stored_status=row["status"],
+        )
+        return {**dict(zip(_ENTRY_COLUMNS, values)), "quarantined_at": now, "quarantined_by": reviewer}
+
+    def list_quarantined(self) -> list[dict[str, object]]:
+        """Rows moved aside by ``quarantine``, by id, values exactly as stored (F009).
+
+        Read-only. Like ``raw_row`` the values are NOT ``MemoryEntry`` objects
+        and are never used as memory in answers. Empty when nothing was ever
+        quarantined (the table does not exist until then).
+        """
+        exists = self._read(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_quarantine'",
+            one=True,
+        )
+        if not exists:
+            return []
+        return [dict(r) for r in self._read("SELECT * FROM memory_quarantine ORDER BY id ASC")]
 
     def count_by_status(self) -> dict[str, int]:
         rows = self._read("SELECT status, COUNT(*) as n FROM memory_entries GROUP BY status")
