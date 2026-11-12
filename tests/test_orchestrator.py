@@ -199,3 +199,75 @@ def test_keyboard_interrupt_from_a_provider_is_not_swallowed(identity, memory_st
 
     with pytest.raises(KeyboardInterrupt):
         Orchestrator(identity, _Interrupted(), memory_store).respond("hello")
+
+
+class _ReturnsProvider(ModelProvider):
+    """Returns whatever it was given, even something the interface forbids."""
+
+    name = "returns"
+
+    def __init__(self, reply):
+        self.reply = reply
+
+    def generate(self, request: GenerationRequest):
+        return self.reply
+
+    def health_check(self, timeout_seconds=None):
+        return True, "always healthy"
+
+
+def _blank_response(text):
+    return GenerationResponse(text=text, provider_name="returns", model_name="m")
+
+
+@pytest.mark.parametrize(
+    ("reply", "expected"),
+    [
+        (None, "a NoneType instead of a GenerationResponse"),
+        ({"text": "hi"}, "a dict instead of a GenerationResponse"),
+        (_blank_response(""), "blank text"),
+        (_blank_response(" \n\t"), "blank text"),
+        (_blank_response(None), "text of type NoneType, not a string"),
+    ],
+)
+def test_respond_falls_back_when_provider_returns_no_usable_reply(
+    identity, memory_store, reply, expected
+):
+    result = Orchestrator(identity, _ReturnsProvider(reply), memory_store).respond("hello")
+
+    assert result.degraded is True
+    assert result.used_fallback is True
+    assert result.provider_used == "echo"
+    assert result.is_live_model is False
+    assert result.text.strip()
+    assert result.degraded_reason == f"provider 'returns' returned no usable reply: {expected}"
+
+
+def test_unusable_reply_is_audited_as_a_provider_failure_not_a_generation(
+    identity, memory_store, caplog
+):
+    import logging
+
+    from odysseus.logging_setup import AUDIT_LOGGER_NAME
+
+    audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
+    audit_logger.addHandler(caplog.handler)
+    try:
+        with caplog.at_level(logging.INFO, logger=AUDIT_LOGGER_NAME):
+            Orchestrator(identity, _ReturnsProvider(_blank_response("")), memory_store).respond("hello")
+    finally:
+        audit_logger.removeHandler(caplog.handler)
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert len([m for m in messages if "orchestrator.provider_failed" in m]) == 1
+    generated = [m for m in messages if "orchestrator.generate" in m]
+    assert len(generated) == 1
+    assert "echo" in generated[0]
+    assert "returns" not in generated[0]
+
+
+def test_usable_reply_with_surrounding_whitespace_is_returned_unchanged(identity, memory_store):
+    result = Orchestrator(identity, _ReturnsProvider(_blank_response("  hi\n")), memory_store).respond("hello")
+    assert result.text == "  hi\n"
+    assert result.degraded is False
+    assert result.used_fallback is False

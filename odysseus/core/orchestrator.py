@@ -20,8 +20,23 @@ from odysseus.exceptions import MemoryError_, ModelProviderError
 from odysseus.logging_setup import audit
 from odysseus.memory.models import MemoryEntry
 from odysseus.memory.store import MemoryStore
-from odysseus.models.base import GenerationRequest, ModelProvider
+from odysseus.models.base import GenerationRequest, GenerationResponse, ModelProvider
 from odysseus.models.echo_provider import EchoProvider
+
+
+def _reply_problem(response: object) -> str | None:
+    """Say why ``response`` cannot be shown as an answer, or None if it can.
+
+    Describes the reply instead of quoting it: the text ends up in the
+    degraded reason and the audit log.
+    """
+    if not isinstance(response, GenerationResponse):
+        return f"a {type(response).__name__} instead of a GenerationResponse"
+    if not isinstance(response.text, str):
+        return f"text of type {type(response.text).__name__}, not a string"
+    if not response.text.strip():
+        return "blank text"
+    return None
 
 
 @dataclass
@@ -46,7 +61,8 @@ class Orchestrator:
 
     ``fallback_provider`` is used automatically whenever ``provider``
     raises ``ModelProviderError`` (or, against the interface contract, any
-    other ``Exception``) -- this is the concrete mechanism
+    other ``Exception``) or returns no usable reply (not a
+    ``GenerationResponse``, or blank text) -- this is the concrete mechanism
     behind "the system must remain usable when optional services or
     external models are unavailable". It defaults to the dependency-free
     ``EchoProvider`` so that guarantee holds even with no extra config.
@@ -97,6 +113,13 @@ class Orchestrator:
         used_fallback = False
         try:
             response = self.provider.generate(request)
+            # A reply that cannot be shown (wrong type, blank text) is a
+            # provider failure too, not an answer: hand over to the fallback.
+            problem = _reply_problem(response)
+            if problem is not None:
+                raise ModelProviderError(
+                    f"provider {self.provider.name!r} returned no usable reply: {problem}"
+                )
             audit("orchestrator.generate", provider=self.provider.name, degraded=False)
         except ModelProviderError as exc:
             degraded = True
