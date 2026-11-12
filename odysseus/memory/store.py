@@ -648,6 +648,20 @@ class MemoryStore:
             return []
         return [dict(r) for r in self._read("SELECT * FROM memory_quarantine ORDER BY id ASC")]
 
+    def count_quarantined(self) -> int:
+        """How many rows ``quarantine`` has moved aside (F009/F073). Read-only.
+
+        0 when nothing was ever quarantined (the table does not exist until
+        then); never creates the table.
+        """
+        exists = self._read(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_quarantine'",
+            one=True,
+        )
+        if not exists:
+            return 0
+        return self._read("SELECT COUNT(*) AS n FROM memory_quarantine", one=True)["n"]
+
     def count_by_status(self) -> dict[str, int]:
         rows = self._read("SELECT status, COUNT(*) as n FROM memory_entries GROUP BY status")
         return {row["status"]: row["n"] for row in rows}

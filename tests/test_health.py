@@ -503,3 +503,54 @@ def test_memory_store_check_accepts_a_store_without_the_unreadable_scan(tmp_path
         count_by_status = staticmethod(real.count_by_status)
 
     assert check_memory_store(OlderStore()).status == CheckStatus.OK
+
+
+def test_memory_store_check_mentions_quarantined_rows(tmp_path):
+    from odysseus.health.diagnostics import check_memory_store
+
+    store = MemoryStore(tmp_path / "mem.sqlite3")
+    ids = _approved_entries(store, 3)
+    assert store.count_quarantined() == 0
+    assert "quarantined" not in check_memory_store(store).detail
+
+    _damage_row(store, ids[0], "tags", "not json")
+    _damage_row(store, ids[2], "status", "archived")
+    store.quarantine(ids[0], reviewer="tester")
+
+    # One row is aside, one is still unreadable: the warning names both facts.
+    assert store.count_quarantined() == 1
+    result = check_memory_store(store)
+    assert result.status == CheckStatus.WARNING
+    assert "1 stored memory entry cannot be read" in result.detail
+    assert "quarantined=1" in result.detail
+
+    store.quarantine(ids[2], reviewer="tester")
+    assert store.count_quarantined() == 2
+    result = check_memory_store(store)
+    # Quarantined rows are dealt with, so they do not degrade the status.
+    assert result.status == CheckStatus.OK
+    assert "counts={'approved': 1}" in result.detail
+    assert "quarantined=2 (see `memory list-quarantined`)" in result.detail
+
+
+def test_count_quarantined_does_not_create_the_quarantine_table(tmp_path):
+    import sqlite3
+    from contextlib import closing
+
+    store = MemoryStore(tmp_path / "mem.sqlite3")
+    _approved_entries(store, 1)
+    assert store.count_quarantined() == 0
+    with closing(sqlite3.connect(store.db_path)) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert "memory_quarantine" not in tables
+
+
+def test_run_diagnostics_reports_quarantined_rows_without_degrading(tmp_path):
+    store = MemoryStore(tmp_path / "mem.sqlite3")
+    ids = _approved_entries(store, 2)
+    _damage_row(store, ids[1], "created_at", "yesterday")
+    store.quarantine(ids[1], reviewer="tester")
+    report = run_diagnostics(OdysseusConfig(), store, EchoProvider(), disk_path=tmp_path)
+    check = [c for c in report.checks if c.name == "memory_store"][0]
+    assert check.status == CheckStatus.OK
+    assert "quarantined=1" in check.detail

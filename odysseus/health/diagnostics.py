@@ -288,6 +288,13 @@ def check_memory_store(store: MemoryStore, pending_warn_count: int = 100) -> Che
     counts = store.count_by_status()
     pending = counts.get("pending", 0)
     detail = f"db={store.db_path} counts={counts}"
+    # Rows moved aside by `memory quarantine` are in no status count; say so,
+    # or they are invisible unless someone runs `memory list-quarantined`.
+    # getattr: a store implementation without this method is not asked.
+    count_quarantined = getattr(store, "count_quarantined", None)
+    quarantined = count_quarantined() if callable(count_quarantined) else 0
+    if quarantined:
+        detail += f" quarantined={quarantined} (see `memory list-quarantined`)"
     if not os.access(store.db_path, os.W_OK):
         # Reads pass integrity_check on a read-only file, but remember()/review
         # would fail; surface it before the user hits it.

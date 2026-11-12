@@ -900,3 +900,19 @@ Append-only log of scheduled-run changes.
 - Only an unreadable row can be quarantined. Reason: otherwise the command would be a way to remove approved memory without a recorded review decision (`reject` / `forget` exist for that).
 - The `memory_quarantine` table is created on first use, not when the store opens. Reason: opening an existing database (including a read-only one) must not start changing its schema.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-12 — F073/F009 `health` reports how many memory rows are quarantined
+
+- Gap: a row moved aside with `memory quarantine` is in no status count, and `health` said nothing about it, so stored data could sit outside memory with no sign of it unless someone ran `memory list-quarantined`. Recorded as not done ("`health` does not mention quarantined rows") in the previous entry and in docs/ARCHITECTURE.md. No test covered it.
+- Fix: `MemoryStore.count_quarantined()` in `odysseus/memory/store.py` returns the number of rows in `memory_quarantine` (read-only; 0 when the table does not exist, and it never creates it). `check_memory_store` in `odysseus/health/diagnostics.py` appends `quarantined=N (see `memory list-quarantined`)` to the `memory_store` detail when N is above zero, in the OK result and in the warnings alike. The check's status does not change because of it. With nothing quarantined the detail is exactly as before. A store without `count_quarantined` is not asked (`getattr`, as for `unreadable_entry_ids`). No config, schema or CLI argument change. docs/ARCHITECTURE.md "Recent fixes" updated, and the two statements in the quarantine entry that this makes untrue were corrected.
+- Test: tests/test_health.py `test_memory_store_check_mentions_quarantined_rows`, `test_count_quarantined_does_not_create_the_quarantine_table`, `test_run_diagnostics_reports_quarantined_rows_without_degrading`. All 3 fail without the change (verified by stashing `odysseus/`: 3 failed, 241 passed).
+- Suite: 244 passed (baseline 241, python3.12 venv outside the repo, cloud sandbox).
+- Smoke run (cloud sandbox, temporary directory outside the repo, echo provider): stored two facts and spoiled the second's `created_at`; `health` warned about id 2; after `memory quarantine 2`, `health` printed `memory_store: ok — ... counts={'pending': 1} quarantined=1 (see `memory list-quarantined`)`, and `health --json` carried the same detail.
+- Not done: `health` gives the count only, not the ids or dates. No threshold turns many quarantined rows into a warning. `count_by_status` still excludes them. `count_quarantined` is not listed in docs/INTEGRATION.md, which names the store's interface in outline only. Not run on Windows. Carried over: no command puts a quarantined row back or repairs it.
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- Quarantined rows are reported as information and leave the status at OK. Reason: quarantining is the remedy the project offers, and a permanent WARNING after using it would make `health` warn forever, since there is no restore or repair command yet. Veto if any quarantined row should keep `health` at WARNING.
+- Added a separate `count_quarantined()` instead of adding a key to `count_by_status()`. Reason: `count_by_status` is printed in the detail and summed by callers and tests as "rows in memory"; a new key would change both.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
