@@ -273,6 +273,10 @@ def check_config(config: OdysseusConfig) -> CheckResult:
     return CheckResult("config", CheckStatus.OK, "configuration loaded and valid")
 
 
+# How many unreadable row ids the memory_store detail names before "and N more".
+_MAX_UNREADABLE_IDS_SHOWN = 5
+
+
 def check_memory_store(store: MemoryStore, pending_warn_count: int = 100) -> CheckResult:
     ok, problem = store.integrity_check()
     if not ok:
@@ -291,6 +295,21 @@ def check_memory_store(store: MemoryStore, pending_warn_count: int = 100) -> Che
             "memory_store",
             CheckStatus.WARNING,
             f"memory database is not writable (new memories cannot be saved); {detail}",
+        )
+    # A row that cannot be decoded passes quick_check and is counted above,
+    # but every listing or query that returns it fails. getattr: a store
+    # implementation without this method is simply not checked for it.
+    find_unreadable = getattr(store, "unreadable_entry_ids", None)
+    unreadable = find_unreadable() if callable(find_unreadable) else []
+    if unreadable:
+        shown = ", ".join(str(i) for i in unreadable[:_MAX_UNREADABLE_IDS_SHOWN])
+        more = len(unreadable) - _MAX_UNREADABLE_IDS_SHOWN
+        return CheckResult(
+            "memory_store",
+            CheckStatus.WARNING,
+            f"{len(unreadable)} stored memory entr{'y' if len(unreadable) == 1 else 'ies'} "
+            f"cannot be read (id {shown}{f' and {more} more' if more > 0 else ''}): "
+            f"listings and answers that would include them fail; {detail}",
         )
     if pending > pending_warn_count:
         return CheckResult(

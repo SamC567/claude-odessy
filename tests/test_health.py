@@ -415,3 +415,91 @@ def test_config_check_known_providers_follow_the_registry():
     for name in BUILTIN_PROVIDERS:
         cfg = OdysseusConfig(model={"provider": name})
         assert check_config(cfg).status == CheckStatus.OK
+
+
+def _approved_entries(store, count):
+    from odysseus.memory.models import MemoryEntry
+
+    ids = []
+    for i in range(count):
+        entry = store.submit_candidate(
+            MemoryEntry(content=f"fact number {i}", source="test", confidence=0.9)
+        )
+        store.approve(entry.id, reviewer="tester")
+        ids.append(entry.id)
+    return ids
+
+
+def _damage_row(store, entry_id, column, value):
+    import sqlite3
+    from contextlib import closing
+
+    with closing(sqlite3.connect(store.db_path)) as conn:
+        conn.execute(f"UPDATE memory_entries SET {column} = ? WHERE id = ?", (value, entry_id))
+        conn.commit()
+
+
+@pytest.mark.parametrize(
+    "column,value",
+    [("status", "archived"), ("tags", "not json"), ("created_at", "yesterday")],
+)
+def test_memory_store_check_warns_about_an_unreadable_row(tmp_path, column, value):
+    from odysseus.exceptions import MemoryError_
+    from odysseus.health.diagnostics import check_memory_store
+
+    store = MemoryStore(tmp_path / "mem.sqlite3")
+    ids = _approved_entries(store, 3)
+    assert check_memory_store(store).status == CheckStatus.OK
+    assert store.unreadable_entry_ids() == []
+
+    _damage_row(store, ids[1], column, value)
+
+    # SQLite itself is satisfied, but the row cannot be shown.
+    assert store.integrity_check() == (True, "ok")
+    with pytest.raises(MemoryError_):
+        store.get(ids[1])
+    assert store.unreadable_entry_ids() == [ids[1]]
+    result = check_memory_store(store)
+    assert result.status == CheckStatus.WARNING
+    assert "1 stored memory entry cannot be read" in result.detail
+    assert f"id {ids[1]}" in result.detail
+    # The check observes only: the damaged row is still there, unchanged.
+    assert sum(store.count_by_status().values()) == 3
+    assert store.unreadable_entry_ids() == [ids[1]]
+
+
+def test_memory_store_check_caps_the_unreadable_ids_it_names(tmp_path):
+    from odysseus.health.diagnostics import check_memory_store
+
+    store = MemoryStore(tmp_path / "mem.sqlite3")
+    ids = _approved_entries(store, 8)
+    for entry_id in ids[:7]:
+        _damage_row(store, entry_id, "tags", "{")
+    result = check_memory_store(store)
+    assert result.status == CheckStatus.WARNING
+    assert "7 stored memory entries cannot be read" in result.detail
+    assert "and 2 more" in result.detail
+    assert f"{ids[5]}" not in result.detail.split("):")[0].split("(id ")[1]
+
+
+def test_run_diagnostics_reports_an_unreadable_memory_row(tmp_path):
+    store = MemoryStore(tmp_path / "mem.sqlite3")
+    ids = _approved_entries(store, 1)
+    _damage_row(store, ids[0], "status", "archived")
+    report = run_diagnostics(OdysseusConfig(), store, EchoProvider(), disk_path=tmp_path)
+    check = [c for c in report.checks if c.name == "memory_store"][0]
+    assert check.status == CheckStatus.WARNING
+    assert report.overall_status == CheckStatus.WARNING
+
+
+def test_memory_store_check_accepts_a_store_without_the_unreadable_scan(tmp_path):
+    from odysseus.health.diagnostics import check_memory_store
+
+    real = MemoryStore(tmp_path / "mem.sqlite3")
+
+    class OlderStore:
+        db_path = real.db_path
+        integrity_check = staticmethod(real.integrity_check)
+        count_by_status = staticmethod(real.count_by_status)
+
+    assert check_memory_store(OlderStore()).status == CheckStatus.OK

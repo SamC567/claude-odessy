@@ -408,6 +408,24 @@ class MemoryStore:
         rows = self._read("SELECT status, COUNT(*) as n FROM memory_entries GROUP BY status")
         return {row["status"]: row["n"] for row in rows}
 
+    def unreadable_entry_ids(self) -> list[int]:
+        """Ids of stored rows that cannot be decoded into a ``MemoryEntry`` (F009/F073).
+
+        Such a row (unknown status, tags that are not a JSON list, a bad
+        timestamp -- e.g. after a hand edit or a partial restore) passes
+        SQLite's own integrity check, yet makes every listing or query that
+        returns it raise ``MemoryError_``. Read-only: reads every row once
+        and changes nothing. Raises ``MemoryError_`` only if the database
+        itself cannot be read.
+        """
+        bad: list[int] = []
+        for row in self._read("SELECT * FROM memory_entries ORDER BY id ASC"):
+            try:
+                _row_to_entry(row)
+            except MemoryError_:
+                bad.append(row["id"])
+        return bad
+
     def integrity_check(self) -> tuple[bool, str]:
         """Run SQLite ``PRAGMA quick_check`` (F009/F073). Read-only.
 
