@@ -303,6 +303,27 @@ class MemoryStore:
         )
         return _row_to_entry(row) if row else None
 
+    def raw_row(self, entry_id: int) -> dict[str, object] | None:
+        """The stored column values of one row, exactly as SQLite holds them (F009).
+
+        Unlike ``get`` nothing is decoded or validated, so this also works
+        for a row ``get`` refuses as corrupt (see ``unreadable_entry_ids``):
+        it is how the stored text of such a row can still be read. Read-only.
+        Returns ``None`` for an unknown id; raises ``MemoryError_`` only if
+        the database itself cannot be read. The values are NOT a
+        ``MemoryEntry`` and must not be used as memory in answers.
+        """
+        if (
+            isinstance(entry_id, int)
+            and not isinstance(entry_id, bool)
+            and not _SQLITE_MIN_INT <= entry_id <= _SQLITE_MAX_INT
+        ):
+            return None
+        row = self._read(
+            "SELECT * FROM memory_entries WHERE id = ?", (entry_id,), one=True
+        )
+        return dict(row) if row else None
+
     def list_pending(self) -> list[MemoryEntry]:
         """All entries waiting in the review inbox."""
         return self._list_by_status(MemoryStatus.PENDING)

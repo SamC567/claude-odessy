@@ -541,3 +541,32 @@ def test_same_fact_submitted_concurrently_is_stored_once(tmp_path):
     assert results["first"].id == results["second"].id
     # Whoever got the write lock first is the one whose provenance is kept.
     assert results["second"].source == "user"
+
+
+def test_raw_row_returns_stored_values_of_a_row_get_refuses(memory_store: MemoryStore):
+    """F009: the stored text of a corrupt row stays readable (read-only, undecoded)."""
+    import sqlite3
+
+    entry = memory_store.submit_candidate(
+        MemoryEntry(content="the gate code is 4471", source="user", confidence=0.9, tags=("home",))
+    )
+    conn = sqlite3.connect(memory_store.db_path)
+    conn.execute("UPDATE memory_entries SET status = 'archived' WHERE id = ?", (entry.id,))
+    conn.commit()
+    conn.close()
+    with pytest.raises(Exception, match="Corrupt memory row"):
+        memory_store.get(entry.id)
+
+    raw = memory_store.raw_row(entry.id)
+
+    assert raw["id"] == entry.id
+    assert raw["content"] == "the gate code is 4471"
+    assert raw["status"] == "archived"
+    assert raw["tags"] == '["home"]'
+    assert raw["reviewed_at"] is None
+    assert memory_store.unreadable_entry_ids() == [entry.id]  # nothing was repaired
+
+
+def test_raw_row_unknown_or_out_of_range_id_is_none(memory_store: MemoryStore):
+    assert memory_store.raw_row(12345) is None
+    assert memory_store.raw_row(2**70) is None

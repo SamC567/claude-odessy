@@ -6,7 +6,7 @@ Usage:
     python -m odysseus.cli memory list-pending
     python -m odysseus.cli memory list-approved
     python -m odysseus.cli memory list-rejected
-    python -m odysseus.cli memory show <id>
+    python -m odysseus.cli memory show <id> [--raw]
     python -m odysseus.cli memory search "words" [--limit N]
     python -m odysseus.cli memory approve <id>
     python -m odysseus.cli memory reject <id>
@@ -218,7 +218,45 @@ def cmd_memory_show(args: argparse.Namespace) -> int:
     # Source tracking (F009): the one place the full stored record of an entry
     # is visible -- tags and creation time are otherwise write-only at the CLI.
     orchestrator, _ = _build_orchestrator(args.config)
-    entry = orchestrator.memory.get(args.entry_id)
+    # ``getattr``: a store without the raw lookup simply has no --raw view.
+    raw_row = getattr(orchestrator.memory, "raw_row", None)
+    if args.raw:
+        if raw_row is None:
+            _print_error("this memory store cannot show raw stored values")
+            return 2
+        stored = raw_row(args.entry_id)
+        if stored is None:
+            print(f"error: No memory entry with id={args.entry_id}", file=sys.stderr)
+            return 2
+        # The values as stored, not decoded or validated: the one way to read
+        # a row the store refuses as corrupt (health names such rows by id).
+        # repr() keeps the stored type visible ('0.9' vs 0.9, b'...' for a
+        # blob); _printable then covers what repr leaves alone (bidi controls).
+        print(f"[{_printable(repr(stored.get('id')))}] raw stored values (not decoded or validated)")
+        width = max(len(str(name)) for name in stored) + 1
+        for name, value in stored.items():
+            if name == "id":
+                continue
+            shown = "NULL" if value is None else _printable(repr(value))
+            print(f"  {(str(name) + ':').ljust(width)} {shown}")
+        return 0
+    try:
+        entry = orchestrator.memory.get(args.entry_id)
+    except MemoryError_ as exc:
+        # Say how the stored values can still be read, but only when they
+        # can: if the raw lookup fails too, the database itself is the problem.
+        try:
+            readable_raw = raw_row is not None and raw_row(args.entry_id) is not None
+        except MemoryError_:
+            readable_raw = False
+        if not readable_raw:
+            raise
+        _print_error(exc)
+        print(
+            f"  (run 'memory show {args.entry_id} --raw' to see the values as stored)",
+            file=sys.stderr,
+        )
+        return 2
     if entry is None:
         print(f"error: No memory entry with id={args.entry_id}", file=sys.stderr)
         return 2
@@ -364,6 +402,11 @@ def build_parser() -> argparse.ArgumentParser:
         "show", help="Show one entry in full (status, source, tags, timestamps)"
     )
     show.add_argument("entry_id", type=int)
+    show.add_argument(
+        "--raw",
+        action="store_true",
+        help="Print the values exactly as stored, without decoding (works for a corrupt row)",
+    )
     show.set_defaults(func=cmd_memory_show)
 
     search = memory_sub.add_parser(

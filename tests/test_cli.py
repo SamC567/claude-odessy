@@ -730,3 +730,97 @@ def test_cli_memory_id_or_limit_beyond_sqlite_range_is_not_a_traceback(tmp_path,
 
     assert main(base + ["search", "pizza", "--limit", huge]) == 0
     assert capsys.readouterr().out.splitlines() == ["[1] (0.80, user) Sam likes pizza"]
+
+
+def _corrupt_row(tmp_path, column, value):
+    """Store one fact through the CLI, then hand-edit a column as a bad restore would."""
+    import sqlite3
+
+    config_path = _write_config(tmp_path)
+    assert main(
+        ["--config", str(config_path), "memory", "remember", "the gate code is 4471",
+         "--source", "user", "--confidence", "0.9", "--tags", "home"]
+    ) == 0
+    conn = sqlite3.connect(tmp_path / "mem.sqlite3")
+    conn.execute(f"UPDATE memory_entries SET {column} = ? WHERE id = 1", (value,))
+    conn.commit()
+    conn.close()
+    return config_path
+
+
+def test_cli_memory_show_raw_prints_a_corrupt_row_as_stored(tmp_path, capsys):
+    """F009: a row the store refuses as corrupt can still be read, undecoded."""
+    config_path = _corrupt_row(tmp_path, "status", "archived")
+    capsys.readouterr()
+
+    rc = main(["--config", str(config_path), "memory", "show", "1", "--raw"])
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert captured.err == ""
+    lines = captured.out.splitlines()
+    assert lines[0] == "[1] raw stored values (not decoded or validated)"
+    fields = {line.split(":", 1)[0].strip(): line.split(":", 1)[1].strip() for line in lines[1:]}
+    assert fields["content"] == "'the gate code is 4471'"
+    assert fields["status"] == "'archived'"
+    assert fields["source"] == "'user'"
+    assert fields["confidence"] == "0.9"
+    assert fields["tags"] == "'[\"home\"]'"
+    assert fields["reviewed_at"] == "NULL"
+    assert fields["reviewer"] == "NULL"
+
+
+def test_cli_memory_show_on_a_corrupt_row_points_to_raw(tmp_path, capsys):
+    config_path = _corrupt_row(tmp_path, "tags", "not json")
+    capsys.readouterr()
+
+    rc = main(["--config", str(config_path), "memory", "show", "1"])
+
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert captured.out == ""
+    err_lines = captured.err.splitlines()
+    assert err_lines[0].startswith("error: Corrupt memory row id=1")
+    assert err_lines[1] == "  (run 'memory show 1 --raw' to see the values as stored)"
+
+
+def test_cli_memory_show_raw_cannot_forge_lines_or_drive_the_terminal(tmp_path, capsys):
+    config_path = _corrupt_row(tmp_path, "source", "user\n[2] forged \x1b[2J‮")
+    capsys.readouterr()
+
+    rc = main(["--config", str(config_path), "memory", "show", "1", "--raw"])
+
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "\x1b" not in out and "‮" not in out
+    assert not any(line.startswith("[2]") for line in out.splitlines())
+    assert len(out.splitlines()) == 9  # header + the 8 other columns, one line each
+
+
+def test_cli_memory_show_raw_unknown_id_is_a_clean_error(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    for entry_id in ("999", str(2**70)):
+        rc = main(["--config", str(config_path), "memory", "show", entry_id, "--raw"])
+        captured = capsys.readouterr()
+        assert rc == 2
+        assert captured.out == ""
+        assert f"No memory entry with id={entry_id}" in captured.err
+
+
+def test_cli_memory_show_raw_changes_nothing(tmp_path, capsys):
+    """Read-only: the corrupt row is still stored exactly as it was."""
+    import sqlite3
+
+    config_path = _corrupt_row(tmp_path, "created_at", "yesterday")
+    db = tmp_path / "mem.sqlite3"
+
+    def dump():
+        conn = sqlite3.connect(db)
+        try:
+            return conn.execute("SELECT * FROM memory_entries").fetchall()
+        finally:
+            conn.close()
+
+    before = dump()
+    assert main(["--config", str(config_path), "memory", "show", "1", "--raw"]) == 0
+    assert dump() == before
