@@ -175,3 +175,43 @@ def test_memory_context_limit_rejects_unusable_values(tmp_path, value):
     path.write_text(f"memory:\n  context_limit: {value}\n")
     with pytest.raises(ConfigError):
         load_config(path)
+
+
+def test_misspelt_keys_in_the_config_file_are_recorded(tmp_path):
+    path = tmp_path / "typo.yaml"
+    path.write_text(
+        "model:\n  provder: ollama\n  timeout_seconds: 5\nmemroy:\n  context_limit: 0\n"
+        "log_level: DEBUG\n"
+    )
+    config = load_config(path)
+    # Still ignored (not an error), so the defaults are in force ...
+    assert config.model.provider == "echo"
+    assert config.memory.context_limit == 3
+    # ... but no longer silently: the names are kept for diagnostics.
+    assert config.unrecognised_keys == ("model.provder", "memroy")
+
+
+def test_misspelt_field_in_an_environment_override_is_recorded(tmp_path, monkeypatch):
+    path = tmp_path / "empty.yaml"
+    path.write_text("")
+    monkeypatch.setenv("ODYSSEUS_MODEL__PROVDER", "ollama")
+    monkeypatch.setenv("ODYSSEUS_MODEL__MODEL_NAME", "phi3")  # a real setting
+    # Not a section of this config: may belong to something else, not reported.
+    monkeypatch.setenv("ODYSSEUS_HOME__DIR", "/somewhere")
+    monkeypatch.setenv("ODYSSEUS_MODEL", "x")
+    config = load_config(path)
+    assert config.model.model_name == "phi3"
+    assert config.unrecognised_keys == ("ODYSSEUS_MODEL__PROVDER",)
+
+
+def test_shipped_default_config_has_no_unrecognised_keys(monkeypatch):
+    for name in list(os.environ):
+        if name.startswith("ODYSSEUS_"):
+            monkeypatch.delenv(name)
+    assert load_config().unrecognised_keys == ()
+
+
+def test_config_built_in_code_has_no_unrecognised_keys():
+    from odysseus.config import OdysseusConfig
+
+    assert OdysseusConfig().unrecognised_keys == ()

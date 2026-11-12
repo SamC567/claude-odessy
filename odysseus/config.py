@@ -19,7 +19,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import yaml
-from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, ValidationError, field_validator, model_validator
 
 from odysseus.exceptions import ConfigError
 
@@ -163,6 +163,20 @@ class OdysseusConfig(BaseModel):
         ),
     )
 
+    # Names found in the config file or environment that match no setting and
+    # were therefore ignored (set by ``load_config``; not part of the schema).
+    _unrecognised_keys: tuple[str, ...] = PrivateAttr(default=())
+
+    @property
+    def unrecognised_keys(self) -> tuple[str, ...]:
+        """Config names that were given but match no setting (F001/F073).
+
+        Unknown names are ignored, not rejected, so a misspelt key
+        (``model.provder``) leaves the default in force. They are kept here so
+        diagnostics can say so. Empty for a config not built by ``load_config``.
+        """
+        return self._unrecognised_keys
+
     @field_validator("audit_log_path")
     @classmethod
     def _audit_log_path_is_set(cls, value: str) -> str:
@@ -186,6 +200,41 @@ class OdysseusConfig(BaseModel):
 # Top-level fields that are plain values rather than sections; these take a
 # single-segment env override (ODYSSEUS_<FIELD>) instead of SECTION__FIELD.
 _TOP_LEVEL_SCALAR_FIELDS = frozenset({"log_level", "audit_log_path"})
+
+
+def _section_fields() -> dict[str, frozenset[str]]:
+    """Field names of every section (a top-level field that is itself a model)."""
+    sections: dict[str, frozenset[str]] = {}
+    for name, info in OdysseusConfig.model_fields.items():
+        model = info.annotation
+        if isinstance(model, type) and issubclass(model, BaseModel):
+            sections[name] = frozenset(model.model_fields)
+    return sections
+
+
+def _unrecognised_keys(file_data: dict[str, Any], environ: Any) -> tuple[str, ...]:
+    """Names in the config file / environment that match no setting.
+
+    File keys are given as ``section.field`` (or the bare top-level name).
+    An environment variable is listed, by its own name, only when it names a
+    real section and an unknown field (``ODYSSEUS_MODEL__PROVDER``): other
+    ``ODYSSEUS_*`` variables may belong to something else and stay ignored
+    without comment. Never raises; values are not looked at beyond their type.
+    """
+    sections = _section_fields()
+    found: list[str] = []
+    for key, value in file_data.items():
+        if key not in OdysseusConfig.model_fields:
+            found.append(str(key))
+        elif key in sections and isinstance(value, dict):
+            found.extend(f"{key}.{sub}" for sub in value if sub not in sections[key])
+    for name in sorted(environ):
+        if not name.startswith(ENV_PREFIX):
+            continue
+        path = name[len(ENV_PREFIX) :].lower().split("__")
+        if len(path) == 2 and path[0] in sections and path[1] not in sections[path[0]]:
+            found.append(name)
+    return tuple(found)
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -244,12 +293,15 @@ def load_config(
     if path is not None and not yaml_path.is_file():
         raise ConfigError(f"Config file not found: {yaml_path}")
     data = _read_yaml(yaml_path)
+    unrecognised = _unrecognised_keys(data, os.environ)
     data = _apply_env_overrides(data)
     if overrides:
         for section, fields in overrides.items():
             data.setdefault(section, {})
             data[section] = {**data.get(section, {}), **fields}
     try:
-        return OdysseusConfig.model_validate(data)
+        config = OdysseusConfig.model_validate(data)
     except ValidationError as exc:
         raise ConfigError(f"Invalid configuration: {exc}") from exc
+    config._unrecognised_keys = unrecognised
+    return config

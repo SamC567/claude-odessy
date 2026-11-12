@@ -271,7 +271,33 @@ def check_gpu(gpu_reader=_read_gpus, warn_free_percent: float = 5.0) -> CheckRes
     return CheckResult("gpu", CheckStatus.OK, detail)
 
 
+# How many unrecognised config names the config detail lists before "and N more".
+_MAX_UNRECOGNISED_KEYS_SHOWN = 10
+
+
+def _unrecognised_keys_note(config: OdysseusConfig) -> str:
+    """Sentence naming config keys that matched no setting, or "" if none.
+
+    Names are shown with ``repr`` so a key from a config file cannot forge
+    report lines or drive the terminal. getattr: a config object without the
+    attribute (not built by ``load_config``) is simply not checked for it.
+    """
+    keys = tuple(getattr(config, "unrecognised_keys", ()) or ())
+    if not keys:
+        return ""
+    shown = ", ".join(repr(str(k))[:80] for k in keys[:_MAX_UNRECOGNISED_KEYS_SHOWN])
+    more = len(keys) - _MAX_UNRECOGNISED_KEYS_SHOWN
+    return (
+        f"{len(keys)} configuration name{'' if len(keys) == 1 else 's'} not recognised "
+        f"and ignored (check the spelling; the default{'' if len(keys) == 1 else 's'} "
+        f"appl{'ies' if len(keys) == 1 else 'y'} instead): {shown}"
+        f"{f' and {more} more' if more > 0 else ''}"
+    )
+
+
 def check_config(config: OdysseusConfig) -> CheckResult:
+    unrecognised = _unrecognised_keys_note(config)
+    also = f"; {unrecognised}" if unrecognised else ""
     # Config already passed pydantic validation to exist as an OdysseusConfig,
     # so this check focuses on policy-level sanity, not just schema validity.
     if config.model.provider not in BUILTIN_PROVIDERS:
@@ -284,7 +310,7 @@ def check_config(config: OdysseusConfig) -> CheckResult:
             CheckStatus.WARNING,
             f"model.provider={config.model.provider!r} is not a recognised provider "
             f"(known: {', '.join(sorted(BUILTIN_PROVIDERS))}; names are case-sensitive): "
-            "the echo fallback will be used",
+            "the echo fallback will be used" + also,
         )
     if (
         config.model.provider == "ollama"
@@ -297,8 +323,13 @@ def check_config(config: OdysseusConfig) -> CheckResult:
             "config",
             CheckStatus.WARNING,
             f"model.base_url={config.model.base_url!r} is not loopback and "
-            "identity.allow_external_providers is false: the echo fallback will be used",
+            "identity.allow_external_providers is false: the echo fallback will be used" + also,
         )
+    if unrecognised:
+        # Unknown names are ignored at load time, so a misspelt key
+        # ("provder: ollama") would otherwise report a clean config while the
+        # setting the user wrote has no effect.
+        return CheckResult("config", CheckStatus.WARNING, unrecognised)
     return CheckResult("config", CheckStatus.OK, "configuration loaded and valid")
 
 

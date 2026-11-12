@@ -613,3 +613,49 @@ def test_run_diagnostics_reports_quarantined_rows_without_degrading(tmp_path):
     check = [c for c in report.checks if c.name == "memory_store"][0]
     assert check.status == CheckStatus.OK
     assert "quarantined=1" in check.detail
+
+
+def test_config_check_warns_about_a_misspelt_config_key(tmp_path):
+    from odysseus.config import load_config
+    from odysseus.health.diagnostics import check_config
+
+    path = tmp_path / "typo.yaml"
+    path.write_text("model:\n  provder: ollama\n")
+    result = check_config(load_config(path))
+    assert result.status == CheckStatus.WARNING
+    assert "1 configuration name not recognised and ignored" in result.detail
+    assert "'model.provder'" in result.detail
+
+    clean = tmp_path / "clean.yaml"
+    clean.write_text("model:\n  provider: echo\n")
+    result = check_config(load_config(clean))
+    assert result.status == CheckStatus.OK
+    assert result.detail == "configuration loaded and valid"
+
+
+def test_config_check_names_misspelt_keys_beside_another_warning(tmp_path):
+    from odysseus.config import load_config
+    from odysseus.health.diagnostics import check_config
+
+    path = tmp_path / "typo.yaml"
+    path.write_text("model:\n  provider: olama\n  base_ulr: http://localhost:1\nextra: 1\n")
+    result = check_config(load_config(path))
+    assert result.status == CheckStatus.WARNING
+    assert "not a recognised provider" in result.detail
+    assert "2 configuration names not recognised and ignored" in result.detail
+    assert "'model.base_ulr', 'extra'" in result.detail
+
+
+def test_config_check_unrecognised_key_cannot_forge_lines_and_long_lists_are_cut(tmp_path):
+    from odysseus.config import load_config
+    from odysseus.health.diagnostics import check_config
+
+    path = tmp_path / "odd.yaml"
+    lines = ['"bad\\nconfig: ok \\e[2J": 1'] + [f"k{i}: 1" for i in range(12)]
+    path.write_text("\n".join(lines) + "\n")
+    result = check_config(load_config(path))
+    assert result.status == CheckStatus.WARNING
+    assert "\n" not in result.detail and "\x1b" not in result.detail
+    assert "13 configuration names" in result.detail
+    assert "and 3 more" in result.detail
+    assert "'k9'" not in result.detail
