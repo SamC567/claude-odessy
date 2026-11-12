@@ -428,3 +428,33 @@ def test_query_survives_unreadable_tags_on_a_non_matching_row(memory_store: Memo
     assert [e.id for e in memory_store.query("food")] == [good.id]
     with pytest.raises(MemoryError_):
         memory_store.query("bicycle")
+
+
+@pytest.mark.parametrize(
+    "stored_tags",
+    ['"work"', '{"work": 1}', "7", "null", "true"],
+    ids=["string", "object", "number", "null", "bool"],
+)
+def test_tags_column_that_is_not_a_json_list_is_a_corrupt_row(memory_store: MemoryStore, stored_tags):
+    """Valid JSON that is not a list must not be coerced into tags: a JSON
+    string used to come back as one tag per character, an object as its keys."""
+    import sqlite3
+    from contextlib import closing
+
+    from odysseus.exceptions import MemoryError_
+
+    good = memory_store.submit_candidate(
+        MemoryEntry(content="Prefers tea", source="user", confidence=0.9, tags=("drink",))
+    )
+    bad = memory_store.submit_candidate(
+        MemoryEntry(content="Standup at nine", source="user", confidence=0.9)
+    )
+    with closing(sqlite3.connect(memory_store.db_path)) as conn:
+        conn.execute("UPDATE memory_entries SET tags = ? WHERE id = ?", (stored_tags, bad.id))
+        conn.commit()
+
+    with pytest.raises(MemoryError_, match=f"Corrupt memory row id={bad.id}"):
+        memory_store.get(bad.id)
+    assert memory_store.unreadable_entry_ids() == [bad.id]
+    # A stored JSON list still decodes as before.
+    assert memory_store.get(good.id).tags == ("drink",)

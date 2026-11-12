@@ -90,6 +90,20 @@ def _searchable_text(content: str | None, tags_json: str | None) -> str:
     return _FIELD_SEP.join(parts).casefold()
 
 
+def _decode_tags(tags_json: str | None) -> tuple[str, ...]:
+    """Decode the stored ``tags`` column, which this store only ever writes as a JSON list.
+
+    Any other JSON value is refused rather than coerced: ``tuple()`` of a
+    JSON string yields one "tag" per character and of a JSON object its
+    keys, which would display tags nobody stored (and that ``query``
+    ignores). Raises ``ValueError``/``TypeError`` for the caller to wrap.
+    """
+    tags = json.loads(tags_json)
+    if not isinstance(tags, list):
+        raise ValueError(f"tags must be a JSON list, found a JSON {type(tags).__name__}")
+    return tuple(tags)
+
+
 def _row_to_entry(row: sqlite3.Row) -> MemoryEntry:
     try:
         return MemoryEntry(
@@ -98,7 +112,7 @@ def _row_to_entry(row: sqlite3.Row) -> MemoryEntry:
             source=row["source"],
             confidence=row["confidence"],
             status=MemoryStatus(row["status"]),
-            tags=tuple(json.loads(row["tags"])),
+            tags=_decode_tags(row["tags"]),
             created_at=datetime.fromisoformat(row["created_at"]),
             reviewed_at=datetime.fromisoformat(row["reviewed_at"]) if row["reviewed_at"] else None,
             reviewer=row["reviewer"],
