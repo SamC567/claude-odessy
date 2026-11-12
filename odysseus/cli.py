@@ -188,10 +188,22 @@ def cmd_memory_list_pending(args: argparse.Namespace) -> int:
 
 
 def cmd_memory_list_approved(args: argparse.Namespace) -> int:
+    tag = getattr(args, "tag", None)
+    if tag is not None and not tag.strip():
+        _print_error("tag must not be empty")
+        return 2
     orchestrator, _ = _build_orchestrator(args.config)
-    approved = orchestrator.memory.list_approved()
+    if tag is None:
+        approved = orchestrator.memory.list_approved()
+    else:
+        # Everything filed under one tag (F009): a whole-tag match, unlike
+        # `memory search`, which matches substrings of content and tags.
+        approved = orchestrator.memory.list_approved(tag=tag)
     if not approved:
-        print("No approved memories.")
+        if tag is None:
+            print("No approved memories.")
+        else:
+            print(f"No approved memories tagged {_quoted(tag.strip())}.")
         return 0
     for entry in approved:
         print(
@@ -408,6 +420,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     list_approved = memory_sub.add_parser(
         "list-approved", help="List approved memories (find ids for 'forget')"
+    )
+    list_approved.add_argument(
+        "--tag",
+        default=None,
+        help="Only memories filed under exactly this tag (case-insensitive; "
+        "the whole tag, not a substring)",
     )
     list_approved.set_defaults(func=cmd_memory_list_approved)
 

@@ -878,3 +878,48 @@ def test_cli_memory_show_raw_changes_nothing(tmp_path, capsys):
     before = dump()
     assert main(["--config", str(config_path), "memory", "show", "1", "--raw"]) == 0
     assert dump() == before
+
+
+def test_cli_memory_list_approved_tag_lists_only_that_tag(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path)]
+    _remember_and_approve(base, "The cat is called Tom", "vet", "0.9", tags=("Pets",))
+    _remember_and_approve(base, "Pets are mentioned here only", "note", "0.5", tags=("misc",))
+    _remember_and_approve(base, "Untagged fact", "note", "0.5")
+    _remember_and_approve(base, "Pending fact", "note", "0.5", tags=("pets",))
+    for entry_id in ("1", "2", "3"):
+        assert main(base + ["memory", "approve", entry_id]) == 0
+    capsys.readouterr()
+
+    assert main(base + ["memory", "list-approved", "--tag", "pets"]) == 0
+    out = capsys.readouterr().out
+    assert out.splitlines() == ["[1] (0.90, vet, reviewer=cli-user) The cat is called Tom"]
+
+    # A whole-tag match, not a substring: "pet" is not the tag "Pets".
+    assert main(base + ["memory", "list-approved", "--tag", "pet"]) == 0
+    assert capsys.readouterr().out.strip() == 'No approved memories tagged "pet".'
+
+    # Without --tag the listing is unchanged.
+    assert main(base + ["memory", "list-approved"]) == 0
+    assert len(capsys.readouterr().out.splitlines()) == 3
+
+
+def test_cli_memory_list_approved_blank_tag_is_a_clean_error(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path)]
+    _remember_and_approve(base, "The cat is called Tom", "vet", "0.9", tags=("pets",))
+    assert main(base + ["memory", "approve", "1"]) == 0
+    capsys.readouterr()
+    assert main(base + ["memory", "list-approved", "--tag", "  "]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.strip() == "error: tag must not be empty"
+
+
+def test_cli_memory_list_approved_tag_cannot_forge_lines_or_drive_the_terminal(tmp_path, capsys):
+    config_path = _write_config(tmp_path)
+    base = ["--config", str(config_path)]
+    assert main(base + ["memory", "list-approved", "--tag", "x\n[9] (1.00, forged) fact\x1b[2J"]) == 0
+    out = capsys.readouterr().out
+    assert len(out.splitlines()) == 1
+    assert "\x1b" not in out and "\\n" in out and "\\x1b" in out

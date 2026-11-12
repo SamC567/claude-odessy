@@ -640,3 +640,46 @@ def test_matched_terms_agree_with_query_on_what_matches(memory_store: MemoryStor
         returned = {e.id for e in memory_store.query(text)}
         explained = {e.id for e in entries if memory_store.matched_terms(text, e)}
         assert returned == explained, text
+
+
+def test_list_approved_by_tag_returns_only_entries_filed_under_that_tag(memory_store: MemoryStore):
+    """A whole-tag filter (F009): not a substring search, and content is ignored."""
+
+    def stored(content, tags=(), approve=True):
+        entry = memory_store.submit_candidate(
+            MemoryEntry(content=content, source="user", confidence=0.5, tags=tags)
+        )
+        return memory_store.approve(entry.id, reviewer="t") if approve else entry
+
+    first = stored("Peanuts must be avoided", tags=("Allergy", "food"))
+    second = stored("Hay fever in spring", tags=(" allergy ",))
+    stored("An allergy is mentioned here only", tags=("notes",))
+    stored("Filed under a longer tag", tags=("allergy-history",))
+    stored("Untagged")
+    stored("Pending fact", tags=("allergy",), approve=False)
+    retracted = stored("Withdrawn fact", tags=("allergy",))
+    memory_store.retract(retracted.id, reviewer="t")
+
+    assert [e.id for e in memory_store.list_approved(tag="allergy")] == [first.id, second.id]
+    assert [e.id for e in memory_store.list_approved(tag="  ALLERGY ")] == [first.id, second.id]
+    assert [e.id for e in memory_store.list_approved(tag="food")] == [first.id]
+    assert memory_store.list_approved(tag="aller") == []
+    assert memory_store.list_approved(tag="nothing-has-this") == []
+    # Without a tag the listing is what it always was.
+    assert len(memory_store.list_approved()) == 5
+
+
+def test_list_approved_by_tag_matches_non_ascii_tags_case_insensitively(memory_store: MemoryStore):
+    entry = memory_store.submit_candidate(
+        MemoryEntry(content="Likes the corner place", source="user", confidence=0.5, tags=("Café",))
+    )
+    memory_store.approve(entry.id, reviewer="t")
+    assert [e.id for e in memory_store.list_approved(tag="CAFÉ")] == [entry.id]
+
+
+def test_list_approved_refuses_a_blank_or_non_string_tag(memory_store: MemoryStore):
+    """A mistaken tag must not silently mean "no filter" and list everything."""
+    with pytest.raises(ValueError):
+        memory_store.list_approved(tag="   ")
+    with pytest.raises(TypeError):
+        memory_store.list_approved(tag=3)

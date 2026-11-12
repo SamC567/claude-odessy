@@ -355,9 +355,29 @@ class MemoryStore:
         """All entries waiting in the review inbox."""
         return self._list_by_status(MemoryStatus.PENDING)
 
-    def list_approved(self) -> list[MemoryEntry]:
-        """All permanent (approved) memory entries."""
-        return self._list_by_status(MemoryStatus.APPROVED)
+    def list_approved(self, *, tag: str | None = None) -> list[MemoryEntry]:
+        """All permanent (approved) memory entries, oldest first.
+
+        With ``tag``, only those filed under that tag (F009): the whole tag
+        must equal ``tag``, ignoring case and surrounding whitespace. Unlike
+        ``query`` this is not a substring search and the content is not
+        looked at, so ``tag="cat"`` does not return an entry tagged
+        ``category`` or one that merely mentions a cat. A blank or
+        non-string ``tag`` is a ``ValueError``/``TypeError`` rather than
+        "no filter", so a caller's mistake cannot list everything.
+        """
+        if tag is None:
+            return self._list_by_status(MemoryStatus.APPROVED)
+        if not isinstance(tag, str):
+            raise TypeError(f"tag must be a string, got {type(tag).__name__}")
+        wanted = tag.strip().casefold()
+        if not wanted:
+            raise ValueError("tag must not be empty")
+        return [
+            entry
+            for entry in self._list_by_status(MemoryStatus.APPROVED)
+            if any(t.strip().casefold() == wanted for t in entry.tags)
+        ]
 
     def list_rejected(self) -> list[MemoryEntry]:
         """All rejected or retracted entries (never used in answers).
