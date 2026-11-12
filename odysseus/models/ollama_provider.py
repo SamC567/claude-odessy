@@ -51,6 +51,31 @@ def _server_error_message(response: object) -> str | None:
     return " ".join(message.split())[:_MAX_SERVER_ERROR_CHARS]
 
 
+def _unusable_response_note(data: dict) -> str:
+    """Why a 200 answer from ``/api/generate`` carried no usable text.
+
+    Describes the body instead of quoting it: a real answer also carries
+    ``context`` (thousands of token ids encoding the prompt) and timing
+    fields, and this message ends up in the audit log and on the terminal.
+    Only ``done_reason`` is quoted, shortened, because it explains the
+    empty answer (e.g. ``"load"``: the model was only loaded). Never raises.
+    """
+    text = data.get("response")
+    if "response" not in data:
+        what = "the 'response' field is missing"
+    elif not isinstance(text, str):
+        what = f"the 'response' field is {type(text).__name__}, not text"
+    elif not text:
+        what = "the 'response' field is empty"
+    else:
+        what = "the 'response' field is blank (whitespace only)"
+    reason = data.get("done_reason")
+    why = ""
+    if isinstance(reason, str) and reason.strip():
+        why = f"; done_reason: {' '.join(reason.split())[:_MAX_SERVER_ERROR_CHARS]!r}"
+    return f"Ollama returned no usable reply: {what}{why}"
+
+
 def _redirect_note(exc: Exception) -> str:
     """Describe a refused redirect, naming its target when known. Never raises."""
     target = None
@@ -128,10 +153,10 @@ class OllamaProvider(ModelProvider):
                         f"Ollama returned a non-object JSON body: {type(data).__name__}"
                     )
                 text = data.get("response", "")
-                if not isinstance(text, str) or not text:
-                    raise ModelProviderError(
-                        f"Ollama returned no usable 'response' field: {data!r}"
-                    )
+                if not isinstance(text, str) or not text.strip():
+                    # Whitespace alone is not an answer: fall back rather
+                    # than present a blank reply as a live model's.
+                    raise ModelProviderError(_unusable_response_note(data))
                 return GenerationResponse(
                     text=text,
                     provider_name=self.name,

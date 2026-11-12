@@ -93,6 +93,60 @@ def test_ollama_provider_empty_response_raises():
         provider.generate(GenerationRequest(prompt="hello"))
 
 
+@pytest.mark.parametrize("blank", [" ", "\n", " \t\r\n ", "\u00a0\u2003"])
+def test_ollama_provider_whitespace_only_response_is_not_an_answer(blank):
+    session = _FakeSession(post_result=_FakeResponse({"response": blank}))
+    provider = OllamaProvider(session=session, max_retries=0)
+    with pytest.raises(ModelProviderError, match="blank"):
+        provider.generate(GenerationRequest(prompt="hello"))
+
+
+def test_ollama_provider_keeps_surrounding_whitespace_of_a_real_reply():
+    session = _FakeSession(post_result=_FakeResponse({"response": "  hi\n"}))
+    provider = OllamaProvider(session=session)
+    assert provider.generate(GenerationRequest(prompt="hello")).text == "  hi\n"
+
+
+def test_ollama_provider_unusable_response_error_does_not_quote_the_body():
+    body = {
+        "model": "llama3",
+        "response": "",
+        "done": True,
+        "done_reason": "load",
+        "context": list(range(5000)),
+        "secret_marker": "PROMPT-DERIVED-TEXT",
+    }
+    session = _FakeSession(post_result=_FakeResponse(body))
+    provider = OllamaProvider(session=session, max_retries=0)
+    with pytest.raises(ModelProviderError) as excinfo:
+        provider.generate(GenerationRequest(prompt="hello"))
+    message = str(excinfo.value)
+    assert len(message) < 300
+    assert "PROMPT-DERIVED-TEXT" not in message
+    assert "4999" not in message
+    assert "empty" in message
+    assert "'load'" in message  # the one field that explains the empty answer
+
+
+@pytest.mark.parametrize(
+    "body, expected",
+    [
+        ({"done": True}, "missing"),
+        ({"response": None}, "NoneType"),
+        ({"response": ["a"]}, "list"),
+        ({"response": "", "done_reason": 7}, "empty"),
+        ({"response": "", "done_reason": "x" * 5000}, "empty"),
+    ],
+)
+def test_ollama_provider_unusable_response_error_names_what_was_wrong(body, expected):
+    session = _FakeSession(post_result=_FakeResponse(body))
+    provider = OllamaProvider(session=session, max_retries=0)
+    with pytest.raises(ModelProviderError) as excinfo:
+        provider.generate(GenerationRequest(prompt="hello"))
+    assert expected in str(excinfo.value)
+    assert len(str(excinfo.value)) < 300
+
+
 def test_ollama_provider_non_object_json_raises_provider_error():
     session = _FakeSession(post_result=_FakeResponse(["not", "an", "object"]))
     provider = OllamaProvider(session=session, max_retries=0)
