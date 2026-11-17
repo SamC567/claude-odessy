@@ -1121,3 +1121,15 @@ Append-only log of scheduled-run changes.
 - Lower bound 0 and no upper bound. Reason: a negative temperature has no meaning as a sampling setting, while the useful maximum differs by model and is not documented as a hard limit. Veto if a cap (e.g. 2.0) is wanted.
 - Same placement as `max_tokens` (in the provider, not `GenerationRequest`). Reason: keeps the shared interface unchanged; other providers ignore temperature.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-17 — Milestone A: no meaningful gaps left (hourly run, log-only)
+
+- Evidence: 325 tests pass on `dev` (python3.12 venv outside the repo, cloud sandbox); 104 log entries since the start of Milestone A, the last ~20 hardening single edge cases (health RAM/disk readers, Ollama request validation, non-JSON replies). Every gap listed in docs/ARCHITECTURE.md "Known Milestone A limitations" is a documented, intentional simplification (substring retrieval, no auto fact-extraction), not a defect.
+- Only open items, neither closable from this sandbox: (1) F003 `OllamaProvider` has never run against a live Ollama process; (2) the 2026-11-11 decision on relative `memory.db_path` / `audit_log_path` anchoring awaits the user.
+- No code change this run. No further changes will be made until the user says what is next.
+- Proposal (not started): read-only compatibility audit against the real Odysseus once accessible, listing any adapters needed. Nothing is integrated into the live Odysseus until approved. Optional next steps needing approval: FTS5 retrieval in `MemoryStore.query`; moving to the next feature IDs in dependency order.
+- Notification: push notification sent this run ("Milestone A has no meaningful gaps left"). Not to be sent again.
+
+### Decisions
+
+- Stop making micro-hardening commits and wait for direction. Reason: returns have dropped to single edge cases; further churn adds log noise. Veto by telling the next run what to build.
