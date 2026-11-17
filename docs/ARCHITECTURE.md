@@ -106,6 +106,7 @@ odysseus/
 
 ## Recent fixes
 
+- `health` disk check (F073), when the memory DB's folder does not exist yet (first run, or `memory.db_path` on another drive), measures the nearest existing folder above it instead of the working directory, so it reports the volume the database will be created on. A relative path whose folders are all missing still ends at the working directory, where it would be resolved. No config, schema or interface change. Tested with temporary folders only; not run on Windows (a missing drive letter falls back to the working directory).
 - `health` disk check (F073) measures how full the memory DB's volume is as `df` does, `used / (used + free)`, where `free` is the space this process may still write. Previously it divided by the volume's total size, which includes blocks reserved for the superuser (5% by default on ext4), so a volume that was full for this user showed about 95% used and, with `disk_critical_percent` above that, could pass as OK or WARNING. No free space at all is now always CRITICAL, as is a volume that reports no size. The detail line also gives the free space in GiB. No config, schema or interface change; the same thresholds now trip slightly earlier on volumes with reserved blocks. Tested with a simulated `shutil.disk_usage` only; not run on Windows (where `disk_usage` has no reserved-block split, so the result is unchanged there).
 
 - `is_loopback_url` (F003, the gate behind `identity.allow_external_providers`, the provider's direct-connection/no-redirect session and the `health` loopback check) no longer calls a URL loopback when it contains user information (`user@host`) or a backslash. Python's `urlparse` and urllib3 (which `requests` uses) disagree on where the host of such a URL is: `http://evil.example\@127.0.0.1:11434` was host `127.0.0.1` to the gate but `evil.example` to `requests`, so a provider built from an unvalidated config was allowed and its prompt went to the outside host. `ModelProviderConfig` already refused `@` in `base_url`, so a normally loaded config was not affected; the fix covers callers that skip that validation (`model_construct`, an adapter with its own config). Errs only towards "not loopback". Not covered: other parser differences were not searched exhaustively; `localhost.` (trailing dot) and IPv4-mapped IPv6 loopback are still treated as not loopback. Tested with the parsers in this environment, not on Windows.
@@ -319,8 +320,9 @@ odysseus/
   `health.gpu_vram_warn_free_percent` (default 5, unchanged behaviour).
 - `run_diagnostics` (F073) now measures disk space at the memory DB's directory
   when no `disk_path` is given (previously the process working directory, which
-  may be a different volume from the data). Falls back to `.` if that directory
-  does not exist yet.
+  may be a different volume from the data). If that directory does not exist yet
+  it uses the nearest existing folder above it (superseded 2026-11-17; see
+  "Recent fixes").
 - `MemoryStore._review` (F009) now guards the status transition inside the
   `UPDATE` itself (`WHERE id = ? AND status = ?`), so two reviewers racing on one
   entry can no longer overwrite each other's decision; the loser gets a

@@ -1021,3 +1021,17 @@ Append-only log of scheduled-run changes.
 
 - Treat a zero-size volume as CRITICAL (previously OK). Reason: it cannot hold the memory database, and reporting it as healthy is the unsafe direction. Veto if some platform reports a real data volume as size 0.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-17 — F073 `health` disk check uses the nearest existing folder when the memory DB folder is missing
+
+- Gap: `run_diagnostics` measured disk space at the memory DB's folder, but if that folder did not exist yet (first run, or `memory.db_path` pointing at a not-yet-created folder on another volume) it fell back to the working directory, which may be a different volume. Recorded as "Not done" in the previous entry.
+- Fix: `odysseus/health/diagnostics.py`: new `_nearest_existing_dir(path)` returns the path or its nearest ancestor that is a directory (skips a same-named file; ends at `Path(".")` for a relative path with no existing parts); `run_diagnostics` uses it for the default disk path. Explicit `disk_path` unchanged. No config, schema, CLI or interface change. docs/ARCHITECTURE.md "Recent fixes" updated and the older note on the `.` fallback marked superseded.
+- Test: tests/test_health.py `test_disk_check_uses_nearest_existing_folder_when_db_folder_is_missing` (DB two folders deep under tmp_path, working directory elsewhere, store not opened), `test_nearest_existing_dir`. Both fail without the change (verified by stashing `odysseus/`: 2 failed, 56 passed in test_health.py).
+- Suite: 296 passed (baseline 294, python3.12 venv outside the repo, cloud sandbox).
+- Not done: not run on Windows; a missing drive letter falls back to the working directory. Still uncovered: Windows RAM branch of `_read_memory_bytes`, `/proc/meminfo` without `MemAvailable`.
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- Nearest existing ancestor rather than reporting the check as WARNING ("folder missing"). Reason: the folder is created on first use, so a missing folder is normal on a fresh install; the ancestor is on the volume it will be created on. Veto if a missing data folder should be flagged.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.

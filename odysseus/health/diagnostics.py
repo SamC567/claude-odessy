@@ -112,6 +112,23 @@ def check_disk_space(path: Path, warn_percent: float, critical_percent: float) -
     return CheckResult("disk_space", CheckStatus.OK, detail)
 
 
+def _nearest_existing_dir(path: Path) -> Path:
+    """Return ``path`` or its nearest ancestor that exists as a directory.
+
+    A relative path whose parts do not exist ends at ``Path(".")`` (the
+    working directory, which is where it would be resolved). If ``path``
+    exists as a file it is skipped, since ``disk_usage`` needs a directory
+    on the same volume anyway.
+    """
+    for candidate in (path, *path.parents):
+        try:
+            if candidate.is_dir():
+                return candidate
+        except OSError:
+            continue
+    return Path(".")
+
+
 REQUIRED_DEPENDENCIES = ("pydantic", "PyYAML", "requests")
 # Supported major versions, mirroring the ranges pinned in requirements.txt.
 SUPPORTED_MAJOR_VERSIONS = {"pydantic": 2, "PyYAML": 6, "requests": 2}
@@ -514,13 +531,15 @@ def run_diagnostics(
     ``model_provider`` fails. When given (and not the very same object as
     ``model_provider``) it gets its own ``fallback_provider:<name>`` check.
     """
-    # Default to the volume holding the memory DB (the data that matters),
-    # falling back to the working directory if its folder doesn't exist yet.
+    # Default to the volume holding the memory DB (the data that matters).
+    # If its folder doesn't exist yet, use the nearest folder above it that
+    # does: that is where the folder will be created, so it is the volume
+    # the database will live on.
     if disk_path is not None:
         path = disk_path
     else:
         db_dir = Path(memory_store.db_path if memory_store is not None else config.memory.db_path).parent
-        path = db_dir if db_dir.exists() else Path(".")
+        path = _nearest_existing_dir(db_dir)
     checks = [
         _safe_check("python_version", check_python_version),
         _safe_check(

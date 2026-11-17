@@ -767,3 +767,35 @@ def test_disk_check_thresholds_and_empty_volume(tmp_path, monkeypatch):
     # A volume reporting no size at all cannot hold the memory database.
     _fake_disk(monkeypatch, total=0, used=0, free=0)
     assert check_disk_space(tmp_path, 85.0, 95.0).status == CheckStatus.CRITICAL
+
+
+def test_disk_check_uses_nearest_existing_folder_when_db_folder_is_missing(tmp_path, monkeypatch):
+    # The DB folder (and its parent) do not exist yet; the volume they will be
+    # created on is the one holding tmp_path, not the working directory.
+    from odysseus.health import diagnostics
+
+    seen = []
+    monkeypatch.setattr(
+        diagnostics,
+        "check_disk_space",
+        lambda path, warn, crit: seen.append(path)
+        or diagnostics.CheckResult("disk_space", CheckStatus.OK, "spy"),
+    )
+    elsewhere = tmp_path / "cwd"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    db = tmp_path / "data" / "nested" / "mem.sqlite3"
+    config = OdysseusConfig(memory={"db_path": str(db)})
+    run_diagnostics(config, None, EchoProvider(), memory_store_error="not opened")
+    assert seen == [tmp_path]
+
+
+def test_nearest_existing_dir(tmp_path):
+    from odysseus.health.diagnostics import _nearest_existing_dir
+
+    assert _nearest_existing_dir(tmp_path) == tmp_path
+    assert _nearest_existing_dir(tmp_path / "a" / "b") == tmp_path
+    f = tmp_path / "file.txt"
+    f.write_text("x")
+    assert _nearest_existing_dir(f / "sub") == tmp_path
+    assert _nearest_existing_dir(Path("no-such-dir-xyz") / "deeper") == Path(".")
