@@ -71,6 +71,52 @@ def test_ollama_provider_success():
     assert session.posted_payloads[0]["prompt"] == "hello"
 
 
+def test_ollama_provider_sends_system_prompt_and_max_tokens():
+    session = _FakeSession(post_result=_FakeResponse({"response": "ok"}))
+    provider = OllamaProvider(session=session)
+    provider.generate(
+        GenerationRequest(prompt="hello", system_prompt="You are Jarvis.", max_tokens=64)
+    )
+    payload = session.posted_payloads[0]
+    assert payload["system"] == "You are Jarvis."
+    assert payload["options"]["num_predict"] == 64
+    # Neither is sent when the request leaves them unset.
+    provider.generate(GenerationRequest(prompt="hello"))
+    payload = session.posted_payloads[1]
+    assert "system" not in payload
+    assert "num_predict" not in payload["options"]
+
+
+def test_ollama_orchestrator_memory_context_reaches_the_server(memory_store):
+    """F001/F003/F009 end to end: approved memory travels in the ``system`` field."""
+    from odysseus.config import IdentityConfig
+    from odysseus.core.identity import JarvisIdentity
+    from odysseus.core.orchestrator import Orchestrator
+
+    identity = JarvisIdentity.from_config(IdentityConfig())
+    session = _FakeSession(post_result=_FakeResponse({"response": "It is 1234."}))
+    orchestrator = Orchestrator(
+        identity=identity, provider=OllamaProvider(session=session), memory=memory_store
+    )
+    entry = orchestrator.remember("The vault code is 1234", source="user", confidence=0.9)
+    memory_store.approve(entry.id, reviewer="tester")
+    result = orchestrator.respond("what is the vault code")
+    assert result.provider_used == "ollama"
+    system = session.posted_payloads[0]["system"]
+    assert identity.persona in system
+    assert "The vault code is 1234" in system
+
+
+@pytest.mark.parametrize("bad", [0, -1, -2, True, 1.5, "64"])
+def test_ollama_provider_refuses_unusable_max_tokens_before_sending(bad):
+    # A negative num_predict means "no limit" to Ollama; it must never be sent.
+    session = _FakeSession(post_result=_FakeResponse({"response": "ok"}))
+    provider = OllamaProvider(session=session)
+    with pytest.raises(ModelProviderError, match="max_tokens must be a positive whole number"):
+        provider.generate(GenerationRequest(prompt="hello", max_tokens=bad))
+    assert session.posted_payloads == []
+
+
 def test_ollama_provider_connection_refused_raises_unavailable():
     session = _FakeSession(post_exc=requests.exceptions.ConnectionError("refused"))
     provider = OllamaProvider(session=session, max_retries=2)

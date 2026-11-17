@@ -136,8 +136,18 @@ class OllamaProvider(ModelProvider):
         }
         if request.system_prompt:
             payload["system"] = request.system_prompt
-        if request.max_tokens:
-            payload["options"]["num_predict"] = request.max_tokens
+        max_tokens = request.max_tokens
+        if max_tokens is not None and (
+            isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1
+        ):
+            # Ollama reads a negative num_predict as "no limit" (-1) or "fill
+            # the context" (-2), so passing it through would turn a bad cap
+            # into an unbounded reply. Refuse before contacting the server.
+            raise ModelProviderError(
+                f"max_tokens must be a positive whole number or None, got {max_tokens!r}"
+            )
+        if max_tokens is not None:
+            payload["options"]["num_predict"] = max_tokens
 
         last_error: Exception | None = None
         server_error: str | None = None

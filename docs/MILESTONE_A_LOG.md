@@ -1091,3 +1091,18 @@ Append-only log of scheduled-run changes.
 
 - A non-JSON body is still retried (`max_retries`), as before. Reason: a truncated body can be transient; changing retry policy is a separate decision. Veto if it should fail on the first attempt like a redirect.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-17 — F003 a bad `max_tokens` is refused, and the system prompt is proven to reach Ollama
+
+- Gap: odysseus/models/ollama_provider.py `generate` lines that send `system_prompt` (as `system`) and `max_tokens` (as `options.num_predict`) were never run by any test (coverage run this session), so nothing showed that the persona and approved memories the orchestrator puts in the system prompt (F009 context) actually reach the model. `max_tokens` was unchecked: 0 was dropped silently, and a negative value went out as `num_predict`, which Ollama reads as "no limit" (-1) or "fill the context" (-2) — a bad cap became an unbounded reply.
+- Fix: `generate` refuses a `max_tokens` that is not None or an int >= 1 (bool excluded) with `ModelProviderError`, before any request is sent (no retries). Valid values are sent as before. No config, schema, CLI or interface change. docs/ARCHITECTURE.md "Recent fixes" updated.
+- Test: tests/test_models.py `test_ollama_provider_refuses_unusable_max_tokens_before_sending` (0, -1, -2, True, 1.5, "64"; nothing posted) — all 6 cases fail without the change (verified by stashing `odysseus/`: 6 failed, 64 passed in test_models.py). `test_ollama_provider_sends_system_prompt_and_max_tokens` and `test_ollama_orchestrator_memory_context_reaches_the_server` (orchestrator → OllamaProvider with an approved memory; the posted `system` field holds the persona and the memory) are coverage tests for existing behaviour and pass without the change.
+- Suite: 312 passed (baseline 304, python3.12 venv outside the repo, cloud sandbox).
+- Not done: `temperature` is still sent unchecked. `GenerationRequest` itself does not validate (other providers ignore `max_tokens`). Not run against a live Ollama process.
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- Refuse in `OllamaProvider` rather than validate in `GenerationRequest.__post_init__`. Reason: keeps the shared interface unchanged (no new exception from constructing a request); the provider is where the value becomes dangerous. Veto if the request type should validate for every backend.
+- 0 is refused rather than treated as "no cap". Reason: the old behaviour (silently uncapped) was the surprising one; an explicit error is reversible. Veto if 0 should mean "use the server default".
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
