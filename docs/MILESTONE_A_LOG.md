@@ -965,3 +965,17 @@ Append-only log of scheduled-run changes.
 - An id that is already in use is refused, not renumbered. Reason: renumbering would break the link between the row and its earlier audit entries; the store never reuses ids, so this only arises after an outside edit.
 - No L0–L5 permission level is attached to the new command. Reason: the level definitions are not in this repo; it follows the existing `quarantine` command (named reviewer, audited). To be revisited when the levels are defined.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-17 — F001 integration guide lists the whole `MemoryStore` interface, kept in step by a test
+
+- Gap: docs/INTEGRATION.md, the guide for merging into the original Odysseus, named 7 of `MemoryStore`'s 20 public methods, told an adapter author to implement "the same five methods" (an adapter built that way would break `health` and most `memory` commands), and stated "41 tests" (263 at baseline). Every entry since the quarantine change recorded a new method as "not listed in docs/INTEGRATION.md". Nothing tied the guide to the code.
+- Fix: docs/INTEGRATION.md: a "`MemoryStore` methods" table with every public method, its purpose and which caller uses it (required vs optional via `getattr`), plus the `db_path` attribute `health` reads; the adapter paragraph now says `Orchestrator` alone needs `submit_candidate` and `query` and points to the table; the hard-coded test count was removed. Docs and tests only; no code, config or interface change. docs/ARCHITECTURE.md "Recent fixes" updated.
+- Test: tests/test_integration_docs.py `test_integration_doc_names_every_public_method` (MemoryStore, ModelProvider, Orchestrator), `test_integration_doc_memory_table_lists_only_real_methods`, `test_integration_doc_states_no_test_count`. 3 of the 5 fail without the doc change (verified by stashing docs/INTEGRATION.md: 3 failed, 2 passed); the ModelProvider and Orchestrator cases already passed and guard against regressions.
+- Suite: 268 passed (baseline 263, python3.12 venv outside the repo, cloud sandbox).
+- Not done: the required/optional labels and signatures were checked by reading the code, not by a test. `OdysseusConfig` members are not checked. docs/MIGRATION_ASSUMPTIONS.md was not re-audited in this run. Not run on Windows.
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- Removed the test count from the guide instead of updating it. Reason: any number there goes stale with the next change; the log already records the count for each change.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.

@@ -26,17 +26,52 @@ python -m odysseus.cli config show
 python -m pytest
 ```
 
-41 tests, no network access required, no external services required
-(the default config uses the dependency-free `EchoProvider`).
+No network access and no external services required (the default config
+uses the dependency-free `EchoProvider`). The test count is recorded per
+change in `docs/MILESTONE_A_LOG.md` rather than here, so it cannot go stale.
 
 ## Module interfaces to integrate against
 
 | Interface | File | Contract |
 |---|---|---|
 | `ModelProvider` | `odysseus/models/base.py` | `generate(GenerationRequest) -> GenerationResponse`, `health_check() -> (bool, str)`. Implement this for any new backend (the original repo's existing model client, a cloud model, etc.) instead of changing the orchestrator. |
-| `MemoryStore` | `odysseus/memory/store.py` | `submit_candidate`, `find_duplicate`, `approve`, `reject`, `query`, `list_pending`, `get`. Backed by SQLite here; the API is intentionally storage-agnostic if the original repo already has a memory backend to adapt to. |
+| `MemoryStore` | `odysseus/memory/store.py` | Backed by SQLite here; the API is intentionally storage-agnostic if the original repo already has a memory backend to adapt to. Full method list and which caller needs each one: see "`MemoryStore` methods" below. |
 | `Orchestrator` | `odysseus/core/orchestrator.py` | `respond(prompt) -> InteractionResult`, `remember(content, source, confidence, tags)`. This is the integration seam for a future chat/voice/API front-end. |
 | `OdysseusConfig` | `odysseus/config.py` | pydantic model; `load_config(path, overrides)`. |
+
+### `MemoryStore` methods
+
+Every public method of `MemoryStore` is listed here; `tests/test_integration_docs.py`
+fails if one is added without being listed. "Required" means the caller uses it
+unconditionally, so an adapter must provide it for that caller to work.
+"Optional" means the caller looks it up with `getattr` and skips the feature
+when it is missing.
+
+| Method | Purpose | Used by |
+|---|---|---|
+| `submit_candidate(entry)` | Store a new candidate as pending (or auto-approve above the configured threshold). | `Orchestrator.remember` (required) |
+| `query(text, limit)` | Approved entries matching a text, best first. | `Orchestrator.respond` (required), `memory search` |
+| `find_duplicate(content)` | Existing entry with the same normalised content. | `memory remember` (optional) |
+| `get(entry_id)` | One entry by id, or `None`. | `memory show` |
+| `raw_row(entry_id)` | Stored values of a row, even an unreadable one. | `memory show --raw` (optional) |
+| `list_pending()` | Review inbox. | `memory list-pending` |
+| `list_approved(tag=None)` | Approved entries, optionally one tag. | `memory list-approved` |
+| `list_rejected()` | Rejected entries. | `memory list-rejected` |
+| `search_terms(text)` | The terms `query` searches for. | `memory search --explain` |
+| `matched_terms(text, entry)` | Which of those terms an entry matched. | `memory search --explain` |
+| `approve(entry_id, reviewer)` | pending → approved (audited). | `memory approve` |
+| `reject(entry_id, reviewer)` | pending → rejected (audited). | `memory reject` |
+| `retract(entry_id, reviewer)` | approved → rejected (audited). | `memory forget` |
+| `quarantine(entry_id, reviewer)` | Move an unreadable row aside (audited). | `memory quarantine` |
+| `restore_quarantined(entry_id, reviewer)` | Undo a quarantine (audited). | `memory restore-quarantined` |
+| `list_quarantined()` | Quarantined rows as stored. | `memory list-quarantined` |
+| `count_quarantined()` | Number of quarantined rows. | `health` (optional) |
+| `count_by_status()` | Row counts per status. | `health` (required) |
+| `unreadable_entry_ids()` | Ids of rows that cannot be decoded. | `health` (optional) |
+| `integrity_check()` | `(ok, detail)` from SQLite's integrity check. | `health` (required) |
+
+`health` also reads the store's `db_path` attribute to report the file and
+free disk space.
 
 ## Configuration
 
@@ -53,9 +88,10 @@ original repo's interfaces differ from the ones above)
   than changing `Orchestrator`.
 - **Memory adapter**: if Odysseus already has persistent storage (e.g.
   a different DB), either point `MemoryStore` at that DB via a new
-  `db_path`-equivalent, or write an adapter implementing the same five
-  methods (`submit_candidate`/`approve`/`reject`/`query`/`list_pending`)
-  backed by that store, and have `Orchestrator` take the adapter instead.
+  `db_path`-equivalent, or write an adapter backed by that store and have
+  `Orchestrator` take the adapter instead. `Orchestrator` alone needs only
+  `submit_candidate` and `query`; the CLI and `health` need the methods
+  marked for them in "`MemoryStore` methods" above.
 - **Identity adapter**: if Odysseus has an existing persona/identity
   concept, `JarvisIdentity.from_config` is the single place to change to
   source it from there instead of `config/default.yaml`.
