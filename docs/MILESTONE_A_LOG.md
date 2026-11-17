@@ -1063,3 +1063,17 @@ Append-only log of scheduled-run changes.
 
 - A failing Windows memory call is reported as "RAM could not be determined" (WARNING) rather than letting the exception reach the crashed-check handler. Reason: matches the Linux unreadable-meminfo behaviour and keeps the check's own wording. Veto if a ctypes failure should surface as a crashed check.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-17 — F073 `health` says when the RAM figure is an estimate
+
+- Gap: since the previous-but-one entry, `check_hardware` on a Linux system without `MemAvailable` reported an estimated available-RAM figure (MemFree + Buffers + Cached + SReclaimable) that looked identical to an exact one. Recorded as "Not done" in the last two entries.
+- Fix: odysseus/health/diagnostics.py: new private `_RamReading`, a 2-tuple subclass with an `estimated` flag (unpacks and compares exactly like `(total, available)`, so existing readers, tests and callers are unchanged). `_parse_meminfo` returns it with `estimated=True` on the estimate path only. `check_hardware` appends " (estimated: no MemAvailable)" to the detail when the reading carries the flag (`getattr` default False). Status thresholds unchanged. No config, schema, CLI or public interface change. docs/ARCHITECTURE.md "Recent fixes" updated.
+- Test: tests/test_health.py `test_hardware_detail_says_when_ram_is_estimated` (meminfo files under tmp_path with and without MemAvailable, same 37.5% figure; only the estimate is labelled; a plain tuple reader is unlabelled). Fails without the change (verified by stashing `odysseus/`: 1 failed, 63 passed in test_health.py).
+- Suite: 302 passed (baseline 301, python3.12 venv outside the repo, cloud sandbox).
+- Not done: not run on Windows or on a pre-3.14 kernel. Windows readings are never labelled (GlobalMemoryStatusEx reports available RAM directly).
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- Label in the detail text only, status unchanged. Reason: the estimate is usually close; flagging it as WARNING would hide real low-RAM conditions behind a permanent warning. Reversible; veto if the estimate should affect status or be a separate field.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.

@@ -892,3 +892,22 @@ def test_read_memory_bytes_uses_windows_reader_without_proc_meminfo(tmp_path, mo
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(diagnostics, "_read_windows_memory", lambda: (8, 4))
     assert diagnostics._read_memory_bytes(tmp_path / "no-meminfo") == (8, 4)
+
+
+def test_hardware_detail_says_when_ram_is_estimated(tmp_path):
+    from odysseus.health import diagnostics
+
+    estimated = tmp_path / "meminfo_old"
+    estimated.write_text("MemTotal: 16000000 kB\nMemFree: 2000000 kB\nCached: 4000000 kB\n")
+    exact = tmp_path / "meminfo_new"
+    exact.write_text("MemTotal: 16000000 kB\nMemFree: 2000000 kB\nMemAvailable: 6000000 kB\n")
+
+    old = diagnostics.check_hardware(memory_reader=lambda: diagnostics._read_memory_bytes(estimated))
+    new = diagnostics.check_hardware(memory_reader=lambda: diagnostics._read_memory_bytes(exact))
+    assert old.status == new.status == CheckStatus.OK
+    assert "37.5%" in old.detail and "37.5%" in new.detail
+    assert "estimated" in old.detail
+    assert "estimated" not in new.detail
+    # A plain (total, available) tuple from any reader is still accepted, unlabelled.
+    plain = diagnostics.check_hardware(memory_reader=lambda: (16, 6))
+    assert "estimated" not in plain.detail

@@ -337,3 +337,5 @@ odysseus/
   (previously the error crashed the interaction).
 
 - `MemoryStore.approve/reject/retract` (F009) reject a blank reviewer with `ReviewInboxError`, so every review decision is attributable.
+
+- `check_hardware` (F073) now says "(estimated: no MemAvailable)" in its detail line when the Linux RAM figure was estimated because `/proc/meminfo` has no `MemAvailable`. Status thresholds are unchanged; a plain `(total, available)` tuple from a custom `memory_reader` is still accepted and shown unlabelled.

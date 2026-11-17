@@ -194,6 +194,22 @@ def check_dependencies(required: tuple[str, ...] = REQUIRED_DEPENDENCIES) -> Che
     return CheckResult("dependencies", CheckStatus.OK, ", ".join(versions))
 
 
+class _RamReading(tuple):
+    """(total, available) bytes, plus whether ``available`` is an estimate.
+
+    A plain 2-tuple for callers (unpacks and compares like one), so any
+    ``memory_reader`` may still return an ordinary ``(total, available)``
+    tuple; ``check_hardware`` reads ``estimated`` with a False default.
+    """
+
+    estimated: bool
+
+    def __new__(cls, total: int, available: int, estimated: bool = False):
+        reading = super().__new__(cls, (total, available))
+        reading.estimated = estimated
+        return reading
+
+
 def _parse_meminfo(text: str) -> tuple[int, int] | None:
     """(total, available) bytes from /proc/meminfo text, or None if unusable.
 
@@ -201,7 +217,9 @@ def _parse_meminfo(text: str) -> tuple[int, int] | None:
     and some container/compatibility layers omit it; then available is
     estimated as MemFree + Buffers + Cached + SReclaimable (the figure
     ``free`` used before MemAvailable existed). Without MemTotal and
-    MemFree the result is None ("RAM could not be determined").
+    MemFree the result is None ("RAM could not be determined"). An
+    estimated result is a ``_RamReading`` with ``estimated=True`` so the
+    hardware check can say so.
     """
     values: dict[str, int] = {}
     for line in text.splitlines():
@@ -217,7 +235,7 @@ def _parse_meminfo(text: str) -> tuple[int, int] | None:
     if "MemFree" not in values:
         return None
     estimate = sum(values.get(k, 0) for k in ("MemFree", "Buffers", "Cached", "SReclaimable"))
-    return total, min(estimate, total)
+    return _RamReading(total, min(estimate, total), estimated=True)
 
 
 def _read_memory_bytes(meminfo: Path = Path("/proc/meminfo")) -> tuple[int, int] | None:
@@ -282,7 +300,9 @@ def check_hardware(
 ) -> CheckResult:
     """Report CPU count and RAM headroom (F073). Read-only, stdlib only.
 
-    GPU/VRAM is covered separately by ``check_gpu``.
+    GPU/VRAM is covered separately by ``check_gpu``. When the reader's
+    result carries ``estimated=True`` (Linux without ``MemAvailable``) the
+    detail line says the available figure is an estimate.
     """
     cpus = os.cpu_count() or 0
     mem = memory_reader()
@@ -294,6 +314,8 @@ def check_hardware(
     avail_pct = available / total * 100
     gib = 1024**3
     detail = f"cpus={cpus}; RAM {available / gib:.1f}/{total / gib:.1f} GiB available ({avail_pct:.1f}%)"
+    if getattr(mem, "estimated", False):
+        detail += " (estimated: no MemAvailable)"
     if avail_pct <= critical_available_percent:
         return CheckResult("hardware", CheckStatus.CRITICAL, detail)
     if avail_pct <= warn_available_percent:
