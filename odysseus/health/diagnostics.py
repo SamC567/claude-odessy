@@ -93,10 +93,19 @@ def check_python_version() -> CheckResult:
 
 
 def check_disk_space(path: Path, warn_percent: float, critical_percent: float) -> CheckResult:
+    """Report how full the volume holding ``path`` is.
+
+    The percentage is ``used / (used + free)``, as ``df`` reports it, where
+    ``free`` is the space this process may still write. Blocks reserved for
+    the superuser (5% by default on ext4) are left out: dividing by
+    ``total`` instead would show a volume that is full for this user as
+    only ~95% used. No free space at all is always CRITICAL.
+    """
     usage = shutil.disk_usage(path)
-    used_percent = (usage.used / usage.total) * 100 if usage.total else 0.0
-    detail = f"{used_percent:.1f}% used at {path}"
-    if used_percent >= critical_percent:
+    usable = usage.used + usage.free
+    used_percent = (usage.used / usable) * 100 if usable else 100.0
+    detail = f"{used_percent:.1f}% used at {path}, {usage.free / 1024**3:.1f} GiB free"
+    if usage.free <= 0 or used_percent >= critical_percent:
         return CheckResult("disk_space", CheckStatus.CRITICAL, detail)
     if used_percent >= warn_percent:
         return CheckResult("disk_space", CheckStatus.WARNING, detail)

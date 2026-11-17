@@ -1007,3 +1007,17 @@ Append-only log of scheduled-run changes.
 
 - Refuse any backslash and any user information outright instead of comparing against urllib3's parser. Reason: keeps `loopback.py` standard-library only and does not tie the gate to one client library's parsing; a local model server needs neither. Veto if a loopback URL with credentials must be supported (the config already refuses it).
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-17 — F073 `health` disk check counts space reserved for root as unavailable
+
+- Gap: `check_disk_space` (odysseus/health/diagnostics.py) computed `used / total`. On a volume with superuser-reserved blocks (ext4 default 5%), `total` includes space this process cannot write, so a volume full for the user (`free == 0`) showed ~95% used; with `disk_critical_percent` set to 97 it reported WARNING, with 99 OK, on a full disk. Its WARNING/CRITICAL branches were also listed as untested in the previous entry.
+- Fix: percentage is `used / (used + free)` (what `df` shows); `free <= 0` is always CRITICAL; a volume reporting no size is CRITICAL instead of "0.0% used" OK. Detail line now ends with `, N.N GiB free`. No config, schema, CLI or interface change. docs/ARCHITECTURE.md "Recent fixes" updated.
+- Test: tests/test_health.py `test_disk_check_counts_reserved_blocks_as_unavailable`, `test_disk_check_percent_matches_df_with_reserved_blocks`, `test_disk_check_thresholds_and_empty_volume` (simulated `shutil.disk_usage`). All 3 fail without the change (verified by stashing `odysseus/`: 3 failed, 53 passed in test_health.py). Lines 100/102 of diagnostics.py (CRITICAL/WARNING returns) were uncovered before this run.
+- Suite: 294 passed (baseline 291, python3.12 venv outside the repo, cloud sandbox).
+- Not done: when the memory DB's directory does not exist yet, the disk check still falls back to the working directory rather than the nearest existing parent. Still uncovered: Windows RAM branch of `_read_memory_bytes`, `/proc/meminfo` without `MemAvailable`. Not run on Windows.
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- Treat a zero-size volume as CRITICAL (previously OK). Reason: it cannot hold the memory database, and reporting it as healthy is the unsafe direction. Veto if some platform reports a real data volume as size 0.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.

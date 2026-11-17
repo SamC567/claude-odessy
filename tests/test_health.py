@@ -723,3 +723,47 @@ def test_config_check_unrecognised_key_cannot_forge_lines_and_long_lists_are_cut
     assert "13 configuration names" in result.detail
     assert "and 3 more" in result.detail
     assert "'k9'" not in result.detail
+
+
+def _fake_disk(monkeypatch, total, used, free):
+    import shutil as _shutil
+
+    from odysseus.health import diagnostics
+
+    usage = _shutil._ntuple_diskusage(total, used, free)
+    monkeypatch.setattr(diagnostics.shutil, "disk_usage", lambda path: usage)
+
+
+def test_disk_check_counts_reserved_blocks_as_unavailable(tmp_path, monkeypatch):
+    # ext4 keeps 5% for root: 95 used + 0 free of 100 is a full disk for us.
+    from odysseus.health.diagnostics import check_disk_space
+
+    _fake_disk(monkeypatch, total=100 * 1024**3, used=95 * 1024**3, free=0)
+    result = check_disk_space(tmp_path, 97.0, 99.0)
+    assert result.status == CheckStatus.CRITICAL
+    assert "100.0% used" in result.detail
+    assert "0.0 GiB free" in result.detail
+
+
+def test_disk_check_percent_matches_df_with_reserved_blocks(tmp_path, monkeypatch):
+    # df: 80 / (80 + 15) = 84.2% -> below the 85% warning line; 90 / (90 + 5) = 94.7% -> WARNING.
+    from odysseus.health.diagnostics import check_disk_space
+
+    _fake_disk(monkeypatch, total=100, used=80, free=15)
+    assert check_disk_space(tmp_path, 85.0, 95.0).status == CheckStatus.OK
+    _fake_disk(monkeypatch, total=100, used=90, free=5)
+    result = check_disk_space(tmp_path, 85.0, 95.0)
+    assert result.status == CheckStatus.WARNING
+    assert "94.7% used" in result.detail
+
+
+def test_disk_check_thresholds_and_empty_volume(tmp_path, monkeypatch):
+    from odysseus.health.diagnostics import check_disk_space
+
+    _fake_disk(monkeypatch, total=100, used=96, free=4)
+    assert check_disk_space(tmp_path, 85.0, 95.0).status == CheckStatus.CRITICAL
+    _fake_disk(monkeypatch, total=100, used=10, free=90)
+    assert check_disk_space(tmp_path, 85.0, 95.0).status == CheckStatus.OK
+    # A volume reporting no size at all cannot hold the memory database.
+    _fake_disk(monkeypatch, total=0, used=0, free=0)
+    assert check_disk_space(tmp_path, 85.0, 95.0).status == CheckStatus.CRITICAL
