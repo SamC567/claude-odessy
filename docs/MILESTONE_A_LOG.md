@@ -979,3 +979,17 @@ Append-only log of scheduled-run changes.
 
 - Removed the test count from the guide instead of updating it. Reason: any number there goes stale with the next change; the log already records the count for each change.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-17 — F073 `health` lists a GPU that does not report its memory instead of failing the GPU query
+
+- Gap: `_read_gpus` (the nvidia-smi reader behind the `gpu` check) had no tests: coverage showed its parsing lines never ran, and the existing GPU tests passed a fake reader. nvidia-smi prints a bracketed placeholder (`[N/A]`, `[Not Supported]`) for a memory value a device cannot give; `int("[N/A]")` raised `ValueError`, so one such GPU turned the whole result into `warning — nvidia-smi present but query failed` and hid every other GPU's figures, including a nearly full one.
+- Fix: `odysseus/health/diagnostics.py`: parsing moved into `_parse_nvidia_smi(out)` and `_vram_mib(field)`. A bracketed placeholder becomes None; `check_gpu` shows such a GPU as `<name>: VRAM not reported` and does not let it change the status; other GPUs are judged as before. Any other non-numeric value, or a line that does not have three fields, still raises `ValueError` and is a failed query (WARNING). Blank lines are skipped. The reader's tuple type is now `(str, int | None, int | None)`. No config, schema or CLI change. docs/ARCHITECTURE.md "Recent fixes" updated.
+- Test: tests/test_health.py `test_read_gpus_parses_nvidia_smi_output`, `test_read_gpus_without_nvidia_smi_is_no_gpu`, `test_read_gpus_unreadable_output_or_failed_run_is_a_failed_query` (3 cases), `test_gpu_that_does_not_report_memory_is_listed_not_a_failed_query`, `test_gpu_without_memory_figures_does_not_hide_a_full_gpu`; `shutil.which` and `subprocess.run` are faked, so no GPU or nvidia-smi is needed. 2 of the 7 fail without the change (verified by stashing `odysseus/`: 2 failed, 273 passed); the other 5 cover reader behaviour that already worked but was untested.
+- Suite: 275 passed (baseline 268, python3.12 venv outside the repo, cloud sandbox).
+- Not done: not run against a real nvidia-smi (this sandbox has no GPU); the placeholder handling follows nvidia-smi's documented bracketed form. AMD/Apple GPUs are still not detected. A failed query still does not say why. Other coverage gaps seen this run (not changed): the Windows RAM branch of `_read_memory_bytes`, the `/proc/meminfo` path without `MemAvailable`, the disk-space WARNING/CRITICAL branches, and `loopback.py` lines 17–20. Not run on Windows.
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- A GPU with no memory figures is reported as information, not a WARNING. Reason: nothing is wrong with it and the GPU is optional; a WARNING on every run for such a board would be permanent noise. Veto if any unreported VRAM should warn.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.

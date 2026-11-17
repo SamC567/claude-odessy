@@ -233,9 +233,41 @@ def check_hardware(
     return CheckResult("hardware", CheckStatus.OK, detail)
 
 
-def _read_gpus() -> list[tuple[str, int, int]] | None:
+def _vram_mib(field: str) -> int | None:
+    """One nvidia-smi memory field in MiB, or None when the GPU does not report it.
+
+    nvidia-smi prints a bracketed placeholder such as "[N/A]" or
+    "[Not Supported]" for a value a device cannot give (for example some
+    unified-memory boards). Anything else that is not a whole number is
+    output this parser does not understand and raises ValueError.
+    """
+    if field.isdigit():
+        return int(field)
+    if field.startswith("[") and field.endswith("]"):
+        return None
+    raise ValueError(f"unexpected nvidia-smi memory value {field!r}")
+
+
+def _parse_nvidia_smi(out: str) -> list[tuple[str, int | None, int | None]]:
+    """Parse ``--query-gpu=name,memory.total,memory.free --format=csv,noheader,nounits``.
+
+    Returns [(name, total_mib, free_mib)], with None for a memory value the
+    GPU does not report. Raises ValueError for output that is not in that
+    shape, so a misread is reported as a failed query rather than guessed at.
+    """
+    gpus = []
+    for line in out.strip().splitlines():
+        if not line.strip():
+            continue
+        name, total, free = (p.strip() for p in line.rsplit(",", 2))
+        gpus.append((name, _vram_mib(total), _vram_mib(free)))
+    return gpus
+
+
+def _read_gpus() -> list[tuple[str, int | None, int | None]] | None:
     """Return [(name, total_mib, free_mib)] via nvidia-smi, [] if no NVIDIA GPU,
-    or None if the query failed. Local subprocess only, no network."""
+    or None if the query failed. Local subprocess only, no network.
+    A memory value the GPU does not report is None (see ``_parse_nvidia_smi``)."""
     exe = shutil.which("nvidia-smi")
     if exe is None:
         return []
@@ -244,11 +276,7 @@ def _read_gpus() -> list[tuple[str, int, int]] | None:
             [exe, "--query-gpu=name,memory.total,memory.free", "--format=csv,noheader,nounits"],
             capture_output=True, text=True, timeout=5, check=True,
         ).stdout
-        gpus = []
-        for line in out.strip().splitlines():
-            name, total, free = (p.strip() for p in line.rsplit(",", 2))
-            gpus.append((name, int(total), int(free)))
-        return gpus
+        return _parse_nvidia_smi(out)
     except (OSError, subprocess.SubprocessError, ValueError):
         return None
 
@@ -257,15 +285,24 @@ def check_gpu(gpu_reader=_read_gpus, warn_free_percent: float = 5.0) -> CheckRes
     """Report NVIDIA GPU / VRAM headroom (F073). Read-only.
 
     No GPU is OK (the GPU is optional; the echo fallback needs none). A query
-    that fails is a WARNING. Other vendors (AMD/Apple) are not detected yet.
+    that fails is a WARNING. A GPU that reports no memory figures ("[N/A]") is
+    listed as "VRAM not reported" and does not affect the status. Other
+    vendors (AMD/Apple) are not detected yet.
     """
     gpus = gpu_reader()
     if gpus is None:
         return CheckResult("gpu", CheckStatus.WARNING, "nvidia-smi present but query failed")
     if not gpus:
         return CheckResult("gpu", CheckStatus.OK, "no NVIDIA GPU detected (optional)")
-    detail = "; ".join(f"{n}: {f}/{t} MiB VRAM free" for n, t, f in gpus)
-    low = [n for n, t, f in gpus if t > 0 and f / t * 100 <= warn_free_percent]
+    detail = "; ".join(
+        f"{n}: VRAM not reported" if t is None or f is None else f"{n}: {f}/{t} MiB VRAM free"
+        for n, t, f in gpus
+    )
+    # A GPU that does not report its memory cannot be judged; it is listed, not warned about.
+    low = [
+        n for n, t, f in gpus
+        if t is not None and f is not None and t > 0 and f / t * 100 <= warn_free_percent
+    ]
     if low:
         return CheckResult("gpu", CheckStatus.WARNING, "VRAM nearly full on " + ", ".join(low) + "; " + detail)
     return CheckResult("gpu", CheckStatus.OK, detail)

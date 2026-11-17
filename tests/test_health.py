@@ -134,6 +134,70 @@ def test_gpu_check_states_and_in_report(tmp_path):
     assert any(c.name == "gpu" for c in report.checks)
 
 
+def _fake_nvidia_smi(monkeypatch, stdout=None, error=None):
+    import subprocess
+
+    from odysseus.health import diagnostics
+
+    monkeypatch.setattr(diagnostics.shutil, "which", lambda name: "/fake/nvidia-smi")
+
+    def run(*args, **kwargs):
+        if error is not None:
+            raise error
+        return subprocess.CompletedProcess(args[0], 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(diagnostics.subprocess, "run", run)
+
+
+def test_read_gpus_parses_nvidia_smi_output(monkeypatch):
+    from odysseus.health.diagnostics import _read_gpus
+
+    _fake_nvidia_smi(monkeypatch, "NVIDIA RTX 4090, 24564, 20000\nTesla, rev 2, 16384, 100\n\n")
+    assert _read_gpus() == [("NVIDIA RTX 4090", 24564, 20000), ("Tesla, rev 2", 16384, 100)]
+
+
+def test_read_gpus_without_nvidia_smi_is_no_gpu(monkeypatch):
+    from odysseus.health import diagnostics
+
+    monkeypatch.setattr(diagnostics.shutil, "which", lambda name: None)
+    assert diagnostics._read_gpus() == []
+
+
+@pytest.mark.parametrize(
+    "stdout, error",
+    [
+        ("garbage line\n", None),
+        ("RTX, 8000, lots\n", None),
+        (None, OSError("cannot execute")),
+    ],
+)
+def test_read_gpus_unreadable_output_or_failed_run_is_a_failed_query(monkeypatch, stdout, error):
+    from odysseus.health.diagnostics import _read_gpus, check_gpu
+
+    _fake_nvidia_smi(monkeypatch, stdout, error)
+    assert _read_gpus() is None
+    assert check_gpu(_read_gpus).status == CheckStatus.WARNING
+
+
+def test_gpu_that_does_not_report_memory_is_listed_not_a_failed_query(monkeypatch):
+    from odysseus.health.diagnostics import _read_gpus, check_gpu
+
+    _fake_nvidia_smi(monkeypatch, "Unified GPU, [N/A], [N/A]\nRTX, 8000, 4000\n")
+    assert _read_gpus() == [("Unified GPU", None, None), ("RTX", 8000, 4000)]
+    result = check_gpu(_read_gpus)
+    assert result.status == CheckStatus.OK
+    assert result.detail == "Unified GPU: VRAM not reported; RTX: 4000/8000 MiB VRAM free"
+
+
+def test_gpu_without_memory_figures_does_not_hide_a_full_gpu():
+    from odysseus.health.diagnostics import check_gpu
+
+    result = check_gpu(lambda: [("Unified GPU", None, None), ("RTX", 8000, 100)])
+    assert result.status == CheckStatus.WARNING
+    assert "VRAM nearly full on RTX;" in result.detail
+    assert "Unified GPU: VRAM not reported" in result.detail
+
+
 def test_gpu_vram_threshold_is_configurable(tmp_path):
     from odysseus.config import HealthConfig
     from odysseus.health.diagnostics import check_gpu
