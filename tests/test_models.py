@@ -8,7 +8,7 @@ from odysseus.exceptions import ModelProviderError, ModelUnavailableError
 from odysseus.models.base import GenerationRequest
 from odysseus.models.echo_provider import EchoProvider
 from odysseus.models.ollama_provider import OllamaProvider
-from odysseus.models.registry import build_provider
+from odysseus.models.registry import build_provider, is_loopback_url
 
 
 def test_echo_provider_never_fails_and_is_labelled():
@@ -265,6 +265,47 @@ def test_non_loopback_base_url_blocked_unless_external_allowed():
     assert build_provider(cfg, allow_external=True).name == "ollama"
     for local in ("http://localhost:1", "http://127.0.0.1:1", "http://[::1]:1"):
         assert build_provider(ModelProviderConfig(provider="ollama", base_url=local)).name == "ollama"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://evil.example\\@127.0.0.1:11434",
+        "http://evil.example\\@localhost:11434/",
+        "http://user@127.0.0.1:11434",
+        "http://user:pw@localhost:11434",
+        "http://127.0.0.1:11434@evil.example",
+        "http://localhost:11434\\@evil.example",
+        "",
+        "not a url",
+        "http://[::1",
+        None,
+    ],
+)
+def test_is_loopback_url_refuses_urls_whose_host_the_http_client_reads_differently(url):
+    assert is_loopback_url(url) is False
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["http://localhost:11434", "http://LOCALHOST:1/api", "http://127.0.0.1:11434", "http://127.5.6.7", "http://[::1]:11434/"],
+)
+def test_is_loopback_url_accepts_plain_loopback_urls(url):
+    assert is_loopback_url(url) is True
+
+
+def test_registry_blocks_a_backslash_userinfo_url_that_skipped_config_validation():
+    # ModelProviderConfig already refuses "@" in base_url; a caller that builds
+    # the config without validation (or an adapter with its own config) must
+    # still not get an Ollama provider aimed at evil.example.
+    cfg = ModelProviderConfig.model_construct(
+        provider="ollama",
+        base_url="http://evil.example\\@127.0.0.1:11434",
+        model_name="llama3",
+        timeout_seconds=1.0,
+        max_retries=0,
+    )
+    assert build_provider(cfg).name == "echo"
 
 
 def test_ollama_health_check_detects_missing_model():

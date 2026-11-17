@@ -993,3 +993,17 @@ Append-only log of scheduled-run changes.
 
 - A GPU with no memory figures is reported as information, not a WARNING. Reason: nothing is wrong with it and the GPU is optional; a WARNING on every run for such a board would be permanent noise. Veto if any unreported VRAM should warn.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-17 — F003 the loopback gate refuses URLs whose host `requests` reads differently
+
+- Gap: `is_loopback_url` (odysseus/models/loopback.py) decided "loopback" from `urllib.parse.urlparse(url).hostname`, but `requests` connects to the host urllib3's `parse_url` finds, and the two disagree when the authority holds a backslash before `@`. Reproduced before the change: `http://evil.example\@127.0.0.1:11434` gave `is_loopback_url(...) == True` while `requests.Request(...).prepare()` targeted `evil.example`. `build_provider` with such a config (built with `ModelProviderConfig.model_construct`, i.e. without validation) returned an `OllamaProvider` aimed at the outside host despite `allow_external_providers: false`. A validated config was already safe (`ModelProviderConfig` refuses `@` in `base_url`). The function's malformed-URL and empty-host branches were also untested (coverage: lines 17–20 missed, noted in the previous entry).
+- Fix: `is_loopback_url` returns False for a non-string, for any URL containing a backslash, and for any URL whose netloc contains `@` (user information). Plain loopback URLs are unaffected. No config, schema, CLI or interface change. docs/ARCHITECTURE.md "Recent fixes" updated.
+- Test: tests/test_models.py `test_is_loopback_url_refuses_urls_whose_host_the_http_client_reads_differently` (10 cases), `test_is_loopback_url_accepts_plain_loopback_urls` (5 cases), `test_registry_blocks_a_backslash_userinfo_url_that_skipped_config_validation`. 5 fail without the change (verified by stashing `odysseus/`: 5 failed, 286 passed); the rest cover branches that already worked but were untested. `odysseus/models/loopback.py` is now at 100% line coverage.
+- Suite: 291 passed (baseline 275, python3.12 venv outside the repo, cloud sandbox).
+- Not done: other `urlparse`/urllib3 differences were not searched exhaustively (checked: `@` after the host, percent-encoded `@`, `[::1]`, trailing-dot `localhost.`). `localhost.` and IPv4-mapped IPv6 loopback are still reported as not loopback (safe direction). Still uncovered elsewhere: the Windows RAM branch of `_read_memory_bytes`, `/proc/meminfo` without `MemAvailable`, disk-space WARNING/CRITICAL branches. Not run on Windows.
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- Refuse any backslash and any user information outright instead of comparing against urllib3's parser. Reason: keeps `loopback.py` standard-library only and does not tie the gate to one client library's parsing; a local model server needs neither. Veto if a loopback URL with credentials must be supported (the config already refuses it).
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
