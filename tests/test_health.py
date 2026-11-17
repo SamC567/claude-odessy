@@ -839,3 +839,56 @@ def test_meminfo_prefers_memavailable_and_handles_unusable_input(tmp_path):
     unreadable = tmp_path / "meminfo_dir"
     unreadable.mkdir()
     assert diagnostics._read_memory_bytes(unreadable) is None
+
+
+class _FakeKernel32:
+    """Simulated kernel32 for the Windows RAM branch (no Windows needed)."""
+
+    def __init__(self, total, avail, ok=1, error=None):
+        self.total, self.avail, self.ok, self.error = total, avail, ok, error
+        self.seen_length = None
+
+    def GlobalMemoryStatusEx(self, ref):
+        if self.error is not None:
+            raise self.error
+        status = ref._obj
+        self.seen_length = status.dwLength
+        status.ullTotalPhys = self.total
+        status.ullAvailPhys = self.avail
+        return self.ok
+
+
+def test_windows_memory_reader_uses_memorystatusex_layout():
+    from odysseus.health import diagnostics
+
+    gib = 1024**3
+    kernel32 = _FakeKernel32(32 * gib, 12 * gib)
+    assert diagnostics._read_windows_memory(kernel32) == (32 * gib, 12 * gib)
+    # MEMORYSTATUSEX is 64 bytes on Windows; dwLength must say so or the call fails.
+    assert kernel32.seen_length == 64
+
+
+def test_windows_memory_reader_failure_is_unknown_not_a_crash():
+    from odysseus.health import diagnostics
+
+    assert diagnostics._read_windows_memory(_FakeKernel32(1, 1, ok=0)) is None
+    assert diagnostics._read_windows_memory(_FakeKernel32(1, 1, error=OSError("denied"))) is None
+    assert (
+        diagnostics._read_windows_memory(_FakeKernel32(1, 1, error=AttributeError("no fn")))
+        is None
+    )
+    # Off Windows there is no ctypes.windll: unknown, not an exception.
+    import ctypes
+
+    if not hasattr(ctypes, "windll"):
+        assert diagnostics._read_windows_memory() is None
+
+
+def test_read_memory_bytes_uses_windows_reader_without_proc_meminfo(tmp_path, monkeypatch):
+    import sys
+
+    from odysseus.health import diagnostics
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(diagnostics, "_read_windows_memory", lambda: (8, 4))
+    assert diagnostics._read_memory_bytes(tmp_path / "no-meminfo") == (8, 4)

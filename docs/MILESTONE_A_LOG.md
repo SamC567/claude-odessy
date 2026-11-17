@@ -1049,3 +1049,17 @@ Append-only log of scheduled-run changes.
 
 - Estimate instead of keeping the WARNING. Reason: the estimate is the figure `free` showed before MemAvailable existed and is usually close; a permanent "could not be determined" WARNING hides real low-RAM conditions on those systems. It can overstate available RAM slightly (Cached includes some memory that cannot be freed). Veto if an estimate should be reported as WARNING or labelled in the output.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-17 — F073 `health` Windows RAM branch is testable and fails safe
+
+- Gap: the Windows branch of `_read_memory_bytes` (odysseus/health/diagnostics.py, `GlobalMemoryStatusEx`) had never been executed by any test; listed as uncovered in the last five entries. Its structure used `ctypes.c_ulong`, which is 4 bytes on Windows but 8 on Linux, so the layout (72 bytes off Windows instead of MEMORYSTATUSEX's 64) could not be checked here. A missing `windll`, an `OSError` from the call, or similar escaped as an exception instead of "RAM could not be determined".
+- Fix: the branch moved into `_read_windows_memory(kernel32=None)` (kernel32 injectable; default `ctypes.windll.kernel32`). Fields are `c_uint32`/`c_uint64` (identical layout on Windows, now 64 bytes on every platform). `AttributeError`/`OSError` or a zero return give None. `_read_memory_bytes` calls it on win32 as before. No config, schema, CLI or interface change. docs/ARCHITECTURE.md "Recent fixes" updated.
+- Test: tests/test_health.py `test_windows_memory_reader_uses_memorystatusex_layout` (simulated kernel32 fills the struct; asserts dwLength == 64), `test_windows_memory_reader_failure_is_unknown_not_a_crash` (zero return, OSError, AttributeError, no windll off Windows), `test_read_memory_bytes_uses_windows_reader_without_proc_meminfo` (sys.platform patched to win32). All 3 fail without the change (verified by stashing `odysseus/`: 3 failed, 60 passed in test_health.py) — partly because the function did not exist; the old layout would also fail the 64-byte assertion off Windows (measured 72).
+- Suite: 301 passed (baseline 298, python3.12 venv outside the repo, cloud sandbox).
+- Not done: not run on Windows; the simulated kernel32 reads the struct via `ctypes.byref(...)._obj` (a CPython detail, test-only). The RAM detail line still does not say when the Linux figure is an estimate.
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- A failing Windows memory call is reported as "RAM could not be determined" (WARNING) rather than letting the exception reach the crashed-check handler. Reason: matches the Linux unreadable-meminfo behaviour and keeps the check's own wording. Veto if a ctypes failure should surface as a crashed check.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.

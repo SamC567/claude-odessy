@@ -233,26 +233,46 @@ def _read_memory_bytes(meminfo: Path = Path("/proc/meminfo")) -> tuple[int, int]
             return None
         return _parse_meminfo(text)
     if sys.platform == "win32":
-        import ctypes
-
-        class _MemStatus(ctypes.Structure):
-            _fields_ = [
-                ("dwLength", ctypes.c_ulong),
-                ("dwMemoryLoad", ctypes.c_ulong),
-                ("ullTotalPhys", ctypes.c_ulonglong),
-                ("ullAvailPhys", ctypes.c_ulonglong),
-                ("ullTotalPageFile", ctypes.c_ulonglong),
-                ("ullAvailPageFile", ctypes.c_ulonglong),
-                ("ullTotalVirtual", ctypes.c_ulonglong),
-                ("ullAvailVirtual", ctypes.c_ulonglong),
-                ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
-            ]
-
-        status = _MemStatus()
-        status.dwLength = ctypes.sizeof(_MemStatus)
-        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
-            return status.ullTotalPhys, status.ullAvailPhys
+        return _read_windows_memory()
     return None
+
+
+def _read_windows_memory(kernel32=None) -> tuple[int, int] | None:
+    """(total, available) bytes via ``GlobalMemoryStatusEx``, or None on failure.
+
+    The structure is MEMORYSTATUSEX: two DWORDs then seven 64-bit counters,
+    64 bytes. Fixed-width types are used (not ``c_ulong``, which is 8 bytes
+    on Linux) so the layout is the same wherever it is built and can be
+    checked by tests off Windows. ``kernel32`` is injectable for tests; by
+    default it is ``ctypes.windll.kernel32``. Any ctypes/OS failure, or the
+    call returning 0, gives None ("RAM could not be determined").
+    """
+    import ctypes
+
+    class _MemStatus(ctypes.Structure):
+        _fields_ = [
+            ("dwLength", ctypes.c_uint32),
+            ("dwMemoryLoad", ctypes.c_uint32),
+            ("ullTotalPhys", ctypes.c_uint64),
+            ("ullAvailPhys", ctypes.c_uint64),
+            ("ullTotalPageFile", ctypes.c_uint64),
+            ("ullAvailPageFile", ctypes.c_uint64),
+            ("ullTotalVirtual", ctypes.c_uint64),
+            ("ullAvailVirtual", ctypes.c_uint64),
+            ("ullAvailExtendedVirtual", ctypes.c_uint64),
+        ]
+
+    status = _MemStatus()
+    status.dwLength = ctypes.sizeof(_MemStatus)
+    try:
+        if kernel32 is None:
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        ok = kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
+    except (AttributeError, OSError):
+        return None
+    if not ok:
+        return None
+    return int(status.ullTotalPhys), int(status.ullAvailPhys)
 
 
 def check_hardware(
