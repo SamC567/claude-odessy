@@ -12,6 +12,8 @@ caller -- everything is translated into ``ModelProviderError`` /
 
 from __future__ import annotations
 
+import math
+
 import requests
 
 from odysseus.exceptions import ModelProviderError, ModelUnavailableError
@@ -128,6 +130,19 @@ class OllamaProvider(ModelProvider):
         self._session = session
 
     def generate(self, request: GenerationRequest) -> GenerationResponse:
+        temperature = request.temperature
+        if (
+            isinstance(temperature, bool)
+            or not isinstance(temperature, (int, float))
+            or not math.isfinite(temperature)
+            or temperature < 0
+        ):
+            # NaN/inf would be serialised as the bare tokens NaN/Infinity,
+            # which are not JSON, and a negative or non-numeric value is not
+            # a sampling temperature. Refuse before contacting the server.
+            raise ModelProviderError(
+                f"temperature must be a finite number of at least 0, got {temperature!r}"
+            )
         payload: dict[str, object] = {
             "model": self.model_name,
             "prompt": request.prompt,

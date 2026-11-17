@@ -117,6 +117,27 @@ def test_ollama_provider_refuses_unusable_max_tokens_before_sending(bad):
     assert session.posted_payloads == []
 
 
+@pytest.mark.parametrize(
+    "bad", [-0.1, -1, float("nan"), float("inf"), float("-inf"), True, "0.7", None]
+)
+def test_ollama_provider_refuses_unusable_temperature_before_sending(bad):
+    # NaN/inf are not JSON and a negative value is not a temperature; neither
+    # may be sent, and the refusal must not be retried.
+    session = _FakeSession(post_result=_FakeResponse({"response": "ok"}))
+    provider = OllamaProvider(session=session, max_retries=2)
+    with pytest.raises(ModelProviderError, match="temperature must be a finite number"):
+        provider.generate(GenerationRequest(prompt="hello", temperature=bad))
+    assert session.posted_payloads == []
+
+
+@pytest.mark.parametrize("good", [0, 0.0, 0.2, 1, 1.5])
+def test_ollama_provider_sends_a_usable_temperature_unchanged(good):
+    session = _FakeSession(post_result=_FakeResponse({"response": "ok"}))
+    provider = OllamaProvider(session=session)
+    provider.generate(GenerationRequest(prompt="hello", temperature=good))
+    assert session.posted_payloads[0]["options"]["temperature"] == good
+
+
 def test_ollama_provider_connection_refused_raises_unavailable():
     session = _FakeSession(post_exc=requests.exceptions.ConnectionError("refused"))
     provider = OllamaProvider(session=session, max_retries=2)

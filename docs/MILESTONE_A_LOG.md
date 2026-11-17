@@ -1106,3 +1106,18 @@ Append-only log of scheduled-run changes.
 - Refuse in `OllamaProvider` rather than validate in `GenerationRequest.__post_init__`. Reason: keeps the shared interface unchanged (no new exception from constructing a request); the provider is where the value becomes dangerous. Veto if the request type should validate for every backend.
 - 0 is refused rather than treated as "no cap". Reason: the old behaviour (silently uncapped) was the surprising one; an explicit error is reversible. Veto if 0 should mean "use the server default".
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-17 — F003 an unusable `temperature` is refused before sending
+
+- Gap: the previous entry left `temperature` "still sent unchecked". odysseus/models/ollama_provider.py `generate` put `GenerationRequest.temperature` into `options` as given: `float("nan")`/`inf` were serialised by `requests` (stdlib `json`, `allow_nan=True`) as the bare tokens `NaN`/`Infinity`, which are not valid JSON, so the request body itself was malformed; a negative value, a string or None was sent to the server as a sampling setting.
+- Fix: `generate` refuses a temperature that is not an int/float (bool excluded), not finite, or below 0 with `ModelProviderError("temperature must be a finite number of at least 0, got ...")`, before any request is sent (no retries). Valid values are sent unchanged. No config, schema, CLI or interface change (`GenerationRequest` still does not validate). docs/ARCHITECTURE.md "Recent fixes" updated.
+- Test: tests/test_models.py `test_ollama_provider_refuses_unusable_temperature_before_sending` (-0.1, -1, nan, inf, -inf, True, "0.7", None; nothing posted with `max_retries=2`) — all 8 cases fail without the change (verified by stashing `odysseus/`: 8 failed, 75 passed in test_models.py). `test_ollama_provider_sends_a_usable_temperature_unchanged` (0, 0.0, 0.2, 1, 1.5) pins existing behaviour and passes without the change.
+- Suite: 325 passed (baseline 312, python3.12 venv outside the repo, cloud sandbox).
+- Not done: no upper bound is enforced (Ollama documents none; inventing one would refuse values a user may want). Not run against a live Ollama process.
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- Lower bound 0 and no upper bound. Reason: a negative temperature has no meaning as a sampling setting, while the useful maximum differs by model and is not documented as a hard limit. Veto if a cap (e.g. 2.0) is wanted.
+- Same placement as `max_tokens` (in the provider, not `GenerationRequest`). Reason: keeps the shared interface unchanged; other providers ignore temperature.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
