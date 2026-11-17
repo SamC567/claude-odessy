@@ -799,3 +799,43 @@ def test_nearest_existing_dir(tmp_path):
     f.write_text("x")
     assert _nearest_existing_dir(f / "sub") == tmp_path
     assert _nearest_existing_dir(Path("no-such-dir-xyz") / "deeper") == Path(".")
+
+
+def test_meminfo_without_memavailable_estimates_available_ram(tmp_path):
+    from odysseus.health import diagnostics
+
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text(
+        "MemTotal:       16000000 kB\n"
+        "MemFree:         2000000 kB\n"
+        "Buffers:          500000 kB\n"
+        "Cached:          3000000 kB\n"
+        "SwapCached:            0 kB\n"
+        "SReclaimable:     500000 kB\n"
+    )
+    total, available = diagnostics._read_memory_bytes(meminfo)
+    assert total == 16000000 * 1024
+    assert available == 6000000 * 1024
+    result = diagnostics.check_hardware(memory_reader=lambda: (total, available))
+    assert result.status == CheckStatus.OK
+    assert "37.5%" in result.detail
+
+
+def test_meminfo_prefers_memavailable_and_handles_unusable_input(tmp_path):
+    from odysseus.health import diagnostics
+
+    assert diagnostics._parse_meminfo(
+        "MemTotal: 1000 kB\nMemFree: 100 kB\nMemAvailable: 400 kB\nCached: 900 kB\n"
+    ) == (1000 * 1024, 400 * 1024)
+    # Estimate never exceeds the total.
+    assert diagnostics._parse_meminfo("MemTotal: 100 kB\nMemFree: 80 kB\nCached: 90 kB\n") == (
+        100 * 1024,
+        100 * 1024,
+    )
+    assert diagnostics._parse_meminfo("MemFree: 100 kB\n") is None
+    assert diagnostics._parse_meminfo("MemTotal: 100 kB\n") is None
+    assert diagnostics._parse_meminfo("") is None
+    # A /proc/meminfo that exists but cannot be read is "unknown", not a crash.
+    unreadable = tmp_path / "meminfo_dir"
+    unreadable.mkdir()
+    assert diagnostics._read_memory_bytes(unreadable) is None

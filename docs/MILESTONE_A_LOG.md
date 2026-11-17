@@ -1035,3 +1035,17 @@ Append-only log of scheduled-run changes.
 
 - Nearest existing ancestor rather than reporting the check as WARNING ("folder missing"). Reason: the folder is created on first use, so a missing folder is normal on a fresh install; the ancestor is on the volume it will be created on. Veto if a missing data folder should be flagged.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-17 — F073 `health` estimates available RAM when `/proc/meminfo` has no `MemAvailable`
+
+- Gap: `_read_memory_bytes` (odysseus/health/diagnostics.py) returned None whenever `/proc/meminfo` lacked `MemAvailable` (kernels before 3.14, some container/compatibility layers), so the `hardware` check always said "RAM could not be determined" (WARNING) there even though the total and free figures were present. An existing but unreadable `/proc/meminfo` raised out of the reader. This branch was listed as uncovered in the previous four entries.
+- Fix: parsing moved into `_parse_meminfo(text)`. `MemAvailable` is used when present; otherwise available = MemFree + Buffers + Cached + SReclaimable, capped at MemTotal. Without MemTotal or MemFree the result is still None. `_read_memory_bytes` takes an optional `meminfo` path (default `/proc/meminfo`, so callers are unchanged) and returns None on `OSError`/`UnicodeDecodeError`. No config, schema, CLI or interface change. docs/ARCHITECTURE.md "Recent fixes" updated.
+- Test: tests/test_health.py `test_meminfo_without_memavailable_estimates_available_ram` (simulated meminfo file under tmp_path, then `check_hardware` on the result), `test_meminfo_prefers_memavailable_and_handles_unusable_input` (MemAvailable preferred, estimate capped, missing fields, empty text, unreadable path). Both fail without the change (verified by stashing `odysseus/`: 2 failed, 58 passed in test_health.py).
+- Suite: 298 passed (baseline 296, python3.12 venv outside the repo, cloud sandbox).
+- Not done: the detail line does not say when the RAM figure is an estimate. The Windows RAM branch (`GlobalMemoryStatusEx`) is still untested. Not run on Windows or on a pre-3.14 kernel.
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- Estimate instead of keeping the WARNING. Reason: the estimate is the figure `free` showed before MemAvailable existed and is usually close; a permanent "could not be determined" WARNING hides real low-RAM conditions on those systems. It can overstate available RAM slightly (Cached includes some memory that cannot be freed). Veto if an estimate should be reported as WARNING or labelled in the output.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.

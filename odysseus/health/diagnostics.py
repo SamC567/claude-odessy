@@ -194,22 +194,44 @@ def check_dependencies(required: tuple[str, ...] = REQUIRED_DEPENDENCIES) -> Che
     return CheckResult("dependencies", CheckStatus.OK, ", ".join(versions))
 
 
-def _read_memory_bytes() -> tuple[int, int] | None:
+def _parse_meminfo(text: str) -> tuple[int, int] | None:
+    """(total, available) bytes from /proc/meminfo text, or None if unusable.
+
+    Uses ``MemAvailable`` when the kernel reports it. Kernels before 3.14
+    and some container/compatibility layers omit it; then available is
+    estimated as MemFree + Buffers + Cached + SReclaimable (the figure
+    ``free`` used before MemAvailable existed). Without MemTotal and
+    MemFree the result is None ("RAM could not be determined").
+    """
+    values: dict[str, int] = {}
+    for line in text.splitlines():
+        key, _, rest = line.partition(":")
+        parts = rest.split()
+        if parts and parts[0].isdigit():
+            values[key.strip()] = int(parts[0]) * 1024
+    total = values.get("MemTotal")
+    if total is None:
+        return None
+    if "MemAvailable" in values:
+        return total, values["MemAvailable"]
+    if "MemFree" not in values:
+        return None
+    estimate = sum(values.get(k, 0) for k in ("MemFree", "Buffers", "Cached", "SReclaimable"))
+    return total, min(estimate, total)
+
+
+def _read_memory_bytes(meminfo: Path = Path("/proc/meminfo")) -> tuple[int, int] | None:
     """Return (total, available) physical RAM in bytes, or None if unknown.
 
     Stdlib only: /proc/meminfo on Linux, GlobalMemoryStatusEx on Windows.
+    An unreadable /proc/meminfo gives None rather than an exception.
     """
-    meminfo = Path("/proc/meminfo")
     if meminfo.exists():
-        values: dict[str, int] = {}
-        for line in meminfo.read_text().splitlines():
-            key, _, rest = line.partition(":")
-            parts = rest.split()
-            if parts and parts[0].isdigit():
-                values[key] = int(parts[0]) * 1024
-        if "MemTotal" in values and "MemAvailable" in values:
-            return values["MemTotal"], values["MemAvailable"]
-        return None
+        try:
+            text = meminfo.read_text()
+        except (OSError, UnicodeDecodeError):
+            return None
+        return _parse_meminfo(text)
     if sys.platform == "win32":
         import ctypes
 
