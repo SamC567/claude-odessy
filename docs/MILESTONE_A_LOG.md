@@ -1077,3 +1077,17 @@ Append-only log of scheduled-run changes.
 
 - Label in the detail text only, status unchanged. Reason: the estimate is usually close; flagging it as WARNING would hide real low-RAM conditions behind a permanent warning. Reversible; veto if the estimate should affect status or be a separate field.
 - Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.
+
+## 2026-11-17 — F003 a reply that is not JSON is named as such
+
+- Gap: odysseus/models/ollama_provider.py `generate` had an `except ValueError` branch for a non-JSON body (uncovered by any test), but with the real `requests` library it was dead code: `requests.exceptions.JSONDecodeError` subclasses `RequestException` as well as `ValueError`, so the earlier `RequestException` branch caught it. A 200 with an HTML/plain body (another program on the configured port) ended as "Ollama request failed after N attempt(s): Expecting value: line 1 column 1 (char 0)", which does not say what went wrong.
+- Fix: only `resp.json()` is wrapped; its `ValueError` becomes a private `_NonJSONBody`, caught before `RequestException`, and the final error is `ModelProviderError("Ollama request to <url> failed after N attempt(s): the server answered with a body that is not JSON (is something other than Ollama listening on this address?)")`, chained from the original decode error. A stale "server said" from an earlier attempt is cleared. Retries, exception type and orchestrator fallback unchanged; the body is not quoted. Reordering the handlers was rejected because `InvalidURL`/`MissingSchema`/`InvalidHeader` are also `ValueError`s and would have been misreported. No config, schema, CLI or interface change. docs/ARCHITECTURE.md "Recent fixes" updated.
+- Test: tests/test_models.py `test_ollama_non_json_reply_is_named_and_not_quoted` (real loopback HTTP server returning HTML, real `requests`; 2 attempts made, message names the cause, prompt echoed in the body is not quoted, cause is a ValueError), `test_ollama_non_json_reply_from_any_session_gets_the_same_message` (stand-in session raising plain ValueError). Both fail without the change (verified by stashing `odysseus/`: 2 failed).
+- Suite: 304 passed (baseline 302, python3.12 venv outside the repo, cloud sandbox).
+- Not done: `health_check`'s unreadable `/api/tags` path already handled this correctly and is unchanged. Not run against a live Ollama process.
+- Remaining gaps: F003 is still untested against a live Ollama process (cannot be closed from this sandbox).
+
+### Decisions
+
+- A non-JSON body is still retried (`max_retries`), as before. Reason: a truncated body can be transient; changing retry policy is a separate decision. Veto if it should fail on the first attempt like a redirect.
+- Still awaiting the user's choice from 2026-11-11 (audit log entry): relative `memory.db_path` / `audit_log_path` anchoring ((a) project root, (b) keep CWD and fix the description). Not acted on.

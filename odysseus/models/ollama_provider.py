@@ -89,6 +89,10 @@ def _redirect_note(exc: Exception) -> str:
     return f"the server answered with a redirect{where}, which was not followed"
 
 
+class _NonJSONBody(Exception):
+    """The server answered, but its body could not be parsed as JSON."""
+
+
 class OllamaProvider(ModelProvider):
     """Provider for a local Ollama (or Ollama-API-compatible) server."""
 
@@ -147,7 +151,13 @@ class OllamaProvider(ModelProvider):
                     timeout=self.timeout_seconds,
                 )
                 resp.raise_for_status()
-                data = resp.json()
+                try:
+                    data = resp.json()
+                except ValueError as exc:
+                    # requests' JSONDecodeError is also a RequestException, so
+                    # without this it was retried and reported as a bare
+                    # "Expecting value" with no hint of what went wrong.
+                    raise _NonJSONBody() from exc
                 if not isinstance(data, dict):
                     raise ModelProviderError(
                         f"Ollama returned a non-object JSON body: {type(data).__name__}"
@@ -181,18 +191,27 @@ class OllamaProvider(ModelProvider):
                 raise ModelProviderError(
                     f"Ollama request to {self.base_url} failed: {_redirect_note(exc)}"
                 ) from exc
-            except requests.exceptions.RequestException as exc:
+            except _NonJSONBody as exc:
                 last_error = exc
                 server_error = None
                 continue
-            except ValueError as exc:  # JSON decode error
+            except requests.exceptions.RequestException as exc:
                 last_error = exc
+                server_error = None
                 continue
 
         if isinstance(last_error, requests.exceptions.ConnectionError):
             raise ModelUnavailableError(
                 f"Could not reach Ollama at {self.base_url}: {last_error}"
             ) from last_error
+        if isinstance(last_error, _NonJSONBody):
+            # Usually another program on the port. The body is not quoted
+            # (it may echo the prompt).
+            raise ModelProviderError(
+                f"Ollama request to {self.base_url} failed after {attempts} attempt(s): "
+                "the server answered with a body that is not JSON "
+                "(is something other than Ollama listening on this address?)"
+            ) from last_error.__cause__
         reason = f" (server said: {server_error})" if server_error else ""
         raise ModelProviderError(
             f"Ollama request failed after {attempts} attempt(s): {last_error}{reason}"

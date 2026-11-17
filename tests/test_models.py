@@ -513,3 +513,55 @@ def test_ollama_redirect_policy_applies_only_to_its_own_loopback_session():
     session = requests.Session()
     OllamaProvider(base_url="http://localhost:11434", session=session)
     assert session.max_redirects == default_limit
+
+
+def test_ollama_non_json_reply_is_named_and_not_quoted():
+    """A 200 whose body is not JSON (another program on the port) says so.
+
+    Uses a real loopback server so the real ``requests`` JSONDecodeError
+    (which is also a RequestException) is exercised, not a stand-in.
+    """
+    from http.server import BaseHTTPRequestHandler
+
+    posts: list[str] = []
+
+    class _NotOllama(BaseHTTPRequestHandler):
+        def do_POST(self):
+            posts.append(self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode())
+            data = b"<html>echo: private prompt</html>"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *args):
+            pass
+
+    server, url = _serve(_NotOllama)
+    try:
+        provider = OllamaProvider(base_url=url, max_retries=1, timeout_seconds=5)
+        with pytest.raises(ModelProviderError) as excinfo:
+            provider.generate(GenerationRequest(prompt="private prompt"))
+    finally:
+        server.shutdown()
+        server.server_close()
+    message = str(excinfo.value)
+    assert "not JSON" in message
+    assert "after 2 attempt(s)" in message
+    assert "private prompt" not in message
+    assert len(posts) == 2
+    assert isinstance(excinfo.value.__cause__, ValueError)
+
+
+def test_ollama_non_json_reply_from_any_session_gets_the_same_message():
+    class _BadJSON(_FakeResponse):
+        def json(self):
+            raise ValueError("Expecting value: line 1 column 1 (char 0)")
+
+    session = _FakeSession(post_result=_BadJSON(None))
+    provider = OllamaProvider(session=session, max_retries=0)
+    with pytest.raises(ModelProviderError) as excinfo:
+        provider.generate(GenerationRequest(prompt="hello"))
+    assert "not JSON" in str(excinfo.value)
+    assert "after 1 attempt(s)" in str(excinfo.value)
