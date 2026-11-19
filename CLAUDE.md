@@ -9,7 +9,7 @@ inaccessible. Code here is built to be integration-ready, not assumed
 already merged — see `docs/INTEGRATION.md` and
 `docs/MIGRATION_ASSUMPTIONS.md`.
 
-Feature IDs span **F001–F134**. Only the features explicitly approved
+Feature IDs span **F001–F134**. Milestone A (F001, F003, F009, F073) is complete; on 2026-11-19 the user approved continuing through the rest in dependency order once `docs/FEATURE_CATALOGUE.md` supplies their definitions (see `docs/MILESTONE_A_LOG.md`). Only the features explicitly approved
 for the current milestone are in scope at any given time (currently
 Milestone A: F001, F003, F009, F073 — see `docs/ARCHITECTURE.md`).
 **Do not expand scope to other feature IDs without being asked.**

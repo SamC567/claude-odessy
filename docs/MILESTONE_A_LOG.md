@@ -1133,3 +1133,14 @@ Append-only log of scheduled-run changes.
 ### Decisions
 
 - Stop making micro-hardening commits and wait for direction. Reason: returns have dropped to single edge cases; further churn adds log noise. Veto by telling the next run what to build.
+
+## 2026-11-19 — User direction: continue beyond Milestone A to F001–F134 (log-only)
+
+- Direction received from the user (interactive message, 2026-11-19): "next run to focus on building rest of the features, push on to create the 134". This is the approval the 2026-11-17 entry was waiting for. Milestone A scope (F001, F003, F009, F073) is closed; next runs proceed through the remaining feature IDs in dependency order. Digital Twin/Avatar stays parked.
+- Blocker for the next run: the repo has no `docs/FEATURE_CATALOGUE.md`. Only F001, F003, F009, F073 and F134 are mentioned anywhere in the repo, so the definitions of the other ~129 features are not available. Do not invent them. The L0–L5 permission-level definitions are also still missing.
+- Until the catalogue is added, the next run should (1) check whether `docs/FEATURE_CATALOGUE.md` now exists and, if so, build the next feature in dependency order; (2) if it does not, log-only and ask once via notification for the catalogue (see Decisions); do not guess feature content.
+
+### Decisions
+
+- Recorded the approval here rather than editing the scheduled prompt. Reason: the stored hourly prompt still says "Milestone A only"; a run that follows it literally would refuse further work. The user needs to update the schedule's prompt to match (or tell the next run to treat this entry as authority). Reversible.
+- Proposed ordering once the catalogue exists: foundations that F001–F073 already expose (permission model, audit/undo, scheduler, tool/plugin interface) before features that depend on them. Veto/replace with the catalogue's own dependency order.
