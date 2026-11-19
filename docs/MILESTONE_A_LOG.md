@@ -1144,3 +1144,9 @@ Append-only log of scheduled-run changes.
 
 - Recorded the approval here rather than editing the scheduled prompt. Reason: the stored hourly prompt still says "Milestone A only"; a run that follows it literally would refuse further work. The user needs to update the schedule's prompt to match (or tell the next run to treat this entry as authority). Reversible.
 - Proposed ordering once the catalogue exists: foundations that F001–F073 already expose (permission model, audit/undo, scheduler, tool/plugin interface) before features that depend on them. Veto/replace with the catalogue's own dependency order.
+
+## 2026-11-19 — Hourly run: catalogue still missing (log-only)
+
+- Sync OK (fetch/checkout/pull/ls-remote all succeeded; dev at 4a3d36b before this entry). `docs/FEATURE_CATALOGUE.md` still does not exist; L0–L5 definitions still missing. No code change.
+- Notification: push notification sent this run asking the user to add `docs/FEATURE_CATALOGUE.md` (and L0–L5 definitions). Not to be sent again for this event.
+- Next recommended action: when the catalogue appears on dev, build the first feature in its dependency order; until then, runs are log-only (and need not add further entries unless something changes).
