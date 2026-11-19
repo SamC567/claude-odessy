@@ -1150,3 +1150,7 @@ Append-only log of scheduled-run changes.
 - Sync OK (fetch/checkout/pull/ls-remote all succeeded; dev at 4a3d36b before this entry). `docs/FEATURE_CATALOGUE.md` still does not exist; L0–L5 definitions still missing. No code change.
 - Notification: push notification sent this run asking the user to add `docs/FEATURE_CATALOGUE.md` (and L0–L5 definitions). Not to be sent again for this event.
 - Next recommended action: when the catalogue appears on dev, build the first feature in its dependency order; until then, runs are log-only (and need not add further entries unless something changes).
+
+## 2026-11-19 — Hourly run: catalogue still missing (log-only, no notification)
+
+- Sync OK (dev at 71ea1cf). `docs/FEATURE_CATALOGUE.md` and L0–L5 definitions still absent. No code change. Notification for this event was already sent earlier today; not repeated.
