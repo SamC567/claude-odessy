@@ -1182,3 +1182,7 @@ Append-only log of scheduled-run changes.
 ## 2026-11-20 — Hourly run: catalogue still missing (log-only, no notification)
 
 - Sync OK (dev at 66a5b2f). `docs/FEATURE_CATALOGUE.md` and L0–L5 definitions still absent. No code change. Notification for this event already sent on 2026-11-19; not repeated.
+
+## 2026-11-20 — Hourly run: catalogue still missing (log-only, no notification)
+
+- Sync OK (dev at 5a31200). `docs/FEATURE_CATALOGUE.md` and L0–L5 definitions still absent. No code change. Notification already sent 2026-11-19; not repeated.
