@@ -1566,3 +1566,7 @@ Append-only log of scheduled-run changes.
 ## 2026-11-25 — Hourly run: catalogue still missing (log-only, no notification)
 
 - Sync OK (dev at 6f33ce8). `docs/FEATURE_CATALOGUE.md` and L0–L5 definitions still absent. No code change. Full suite: 325 passed (use `python -m pip install -r requirements-dev.txt`; bare `pip` targets a different interpreter). Notification already sent 2026-11-19; not repeated.
+
+## 2026-11-25 — Hourly run: catalogue still missing (log-only, no notification)
+
+- Sync OK (dev at d5fa9ee). `docs/FEATURE_CATALOGUE.md` and L0–L5 definitions still absent. No code change. Notification already sent 2026-11-19; not repeated.
